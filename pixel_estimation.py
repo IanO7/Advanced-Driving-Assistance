@@ -210,7 +210,7 @@ class Lane:
         return result
 
 from ultralytics import solutions
-cap = cv2.VideoCapture("pedestrian_crash.mp4")
+cap = cv2.VideoCapture("car_crash.mp4")
 assert cap.isOpened(), "Error reading video file"
 w, h, fps = (int(cap.get(x)) for x in (cv2.CAP_PROP_FRAME_WIDTH, cv2.CAP_PROP_FRAME_HEIGHT, cv2.CAP_PROP_FPS))
 video_writer = cv2.VideoWriter("distance_output.avi", cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
@@ -256,10 +256,6 @@ while cap.isOpened():
     if not success:
         print("Video frame is empty or processing is complete.")
         break
-
-    # Resize frame to 1920x1080 for standardization
-    im0 = cv2.resize(im0, (1920, 1080))
-
     # Run YOLO detection
     results = model(im0)[0]
     # Only keep boxes for 'car' and 'person' classes (COCO: car=2, person=0)
@@ -275,10 +271,10 @@ while cap.isOpened():
     last_boxes = boxes
 
     plot_im = im0.copy()
+    # Draw the red reference dot at the true video center bottom (before overlays)
+    frame_center_x = im0.shape[1] // 2
+    frame_ref_y = int(im0.shape[0] * 0.80)
     # Define reference point for distance calculations (just above the bottom center of the screen, ~1cm from bottom)
-    frame_center_x = plot_im.shape[1] // 2
-    # Move the reference point to about 92% of the frame height (a bit higher above the bottom)
-    frame_ref_y = int(plot_im.shape[0] * 0.92)
 
     # --- Lane detection (Automatic Addison pipeline) ---
     lane_obj = Lane(plot_im)
@@ -289,12 +285,12 @@ while cap.isOpened():
     plot_im = lane_obj.get_lane_overlay()
 
     # --- Car and pedestrian detection logic ---
-    # Draw the reference point (bottom center of the screen) used for distance calculations
+    # Draw the red reference dot as the very last step so it is always visible and centered
+    frame_center_x = plot_im.shape[1] // 2
     ref_point = (frame_center_x, frame_ref_y)
-    
-    cv2.circle(plot_im, ref_point, 10, (0, 0, 255), -1)  # Red filled circle being drawn
-    # ALERT DISTANCES ARE MEASURED FROM THE CENTROID OF THE FRONT CAR (OR PEDESTRIAN) TO THE REFERENCE POINT (red dot, 80% down the screen).
-    # This ensures only objects directly in front and close to the vehicle trigger alerts, matching real-world collision risk.
+    # Draw the red reference dot at the image center (horizontal center, 80% down)
+    image_center_x = plot_im.shape[1] // 2
+    image_center_y = int(plot_im.shape[0] * 0.80)
     COLLISION_THRESHOLD = 200  # Pixel distance for collision warning
     PEDESTRIAN_THRESHOLD = 335  # Pixel distance for pedestrian alert
     collision_indices = set()
@@ -382,6 +378,13 @@ while cap.isOpened():
             mid_pt = ((ref_edge[0] + edge[0]) // 2, (ref_edge[1] + edge[1]) // 2)
             cv2.putText(plot_im, f"{dist:.1f}px", mid_pt, cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
+
+    # Draw the red reference dot as the very last step (centered, no rectangle)
+    frame_center_x = plot_im.shape[1] // 2
+    frame_ref_y = int(plot_im.shape[0] * 0.80)
+    print(f"plot_im width: {plot_im.shape[1]}, center_x: {frame_center_x}")
+    ref_point = (frame_center_x, frame_ref_y)
+    cv2.circle(plot_im, ref_point, 18, (0, 0, 255), -1)  # Larger red filled circle for visibility
     cv2.imshow("Distances", plot_im)
     video_writer.write(plot_im)
 
