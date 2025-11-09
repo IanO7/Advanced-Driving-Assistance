@@ -74,6 +74,10 @@ except ImportError:
     def playsound(path):
         pass  # fallback: do nothing if playsound is not installed
 
+# Prevent overlapping alert sounds
+alert_sound_lock = threading.Lock()
+alert_sound_playing = False
+
 class Lane:
     def __init__(self, orig_frame):
         self.orig_frame = orig_frame
@@ -339,7 +343,7 @@ while cap.isOpened():
         cv2.putText(plot_im, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
 
 
-    # Play alert sound if any warning is triggered
+    # Play alert sound if any warning is triggered, but do not overlap
     alert_triggered = False
     if pedestrian_indices:
         cv2.putText(plot_im, "Pedestrian Alert!", (30, 120), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 0, 255), 4)
@@ -347,14 +351,23 @@ while cap.isOpened():
     if collision_indices:
         cv2.putText(plot_im, "Collision Warning!", (30, 60), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 4)
         alert_triggered = True
-    # Play sound in a separate thread to avoid blocking
+
+    def play_alert_once():
+        global alert_sound_playing
+        with alert_sound_lock:
+            if alert_sound_playing:
+                return
+            alert_sound_playing = True
+        try:
+            playsound(os.path.join(os.path.dirname(__file__), 'alert_sound.mp3'))
+        except Exception:
+            pass
+        finally:
+            with alert_sound_lock:
+                alert_sound_playing = False
+
     if alert_triggered:
-        def play_alert():
-            try:
-                playsound(os.path.join(os.path.dirname(__file__), 'alert_sound.mp3'))
-            except Exception:
-                pass
-        threading.Thread(target=play_alert, daemon=True).start()
+        threading.Thread(target=play_alert_once, daemon=True).start()
 
     # Draw distances if reference object is selected
     if reference_idx is not None and len(boxes) > 0 and reference_idx < len(boxes):
