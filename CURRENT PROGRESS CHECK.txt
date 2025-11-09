@@ -1,0 +1,54 @@
+
+	Detection: Only cars (COCO class 2) and pedestrians (COCO class 0) are identified and visualized.
+Car logic:
+Collision warning (red): Only for the single car directly in front (closest to the bottom center of the frame) if it is within the collision threshold.
+Front car (orange): The car directly in front (closest to bottom center), if not in collision range.
+Other cars (green): All other detected cars, regardless of position (side, far, etc.).
+Pedestrian logic:
+Pedestrian alert (magenta): Only for pedestrians close to the front car (within a set pixel threshold).
+Other pedestrians (cyan): All other detected pedestrians.
+Restrictions:
+Collision and pedestrian alerts are only for the car and pedestrians directly in front, not for those on the sides or behind.
+Only one car is considered the “front car” for collision and pedestrian proximity checks.
+
+=============================================================================================
+
+DOCUMENTATON BELOW IMPORTANT + UNDERSTANDING!
+
+
+
+-ABOVE IS YOLO ultralytics
+
+
+-BELOW IS OPENCV
+-Lane warning, need to make better now doesnt detect very well in both hgreen & line cases
+
+
+-PERODUA FEATURWS BELOW
+-etection of pedestrian & vehicle collision
+-Front departure alert
+-lane departure warning
+-
+
+
+**BASED ON PEDESTRIAN RUSHING VIDEO, COLLISION ALERT IS GOOD perfect detected SO JJUST MINOR TWEAK PERGEVY FOR PEDESRIAN AND CAR SENSITIVITY ONLY, THEN LDW LATER EASYT
+**ALERTS SHOULD BE BASED ON POSSIBLE COLLISION SO FRONT CLOSE, SIDE CAN BE IGNORED SINCE WONT ALERT IF ONCOMING  BUT COMING INTO FRONT LANE WILL! (SIDE IS ONLY IDENTIFIED)
+
+-High threshold detects more, lower threshold detects less since range being considered
+-Bottom bonnet, then increase threshold to alert (else too low wont alert), but not bonnet low threshold will already alert
+	=> BECAUSE IF BONNET THEN LARGER RANGE TO CONSIDER SNCE BOTTOM OF SCREEN TO CAR IS LARGER BUT ACTUALLY VERY CLOSE (upper top) & IF NO BONNET THEN ACTUAL IS JSUT THAT SHORT RANGE 
+	=> CODE IMPORTANT NOTE TO ADD ALREADY IMPLEMENTED IS RED/GREEN/ORANGE IS FRONT CAR AND COLLISIONS BUT REFERENCING BOTTOM CENTER OF SCREEN (HENCE BONNET CHANGES ETC, CALIBRATION REQUIRED, BUT NO FIXED OBJ ACTUALLY IN VIDEO NEEDED)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
