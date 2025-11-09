@@ -66,6 +66,13 @@ def display_lines(image, lines):
 import cv2
 import numpy as np
 import edge_detection as edge
+import threading
+import os
+try:
+    from playsound import playsound
+except ImportError:
+    def playsound(path):
+        pass  # fallback: do nothing if playsound is not installed
 
 class Lane:
     def __init__(self, orig_frame):
@@ -199,7 +206,7 @@ class Lane:
         return result
 
 from ultralytics import solutions
-cap = cv2.VideoCapture("car_crash.mp4")
+cap = cv2.VideoCapture("pedestrian_crash.mp4")
 assert cap.isOpened(), "Error reading video file"
 w, h, fps = (int(cap.get(x)) for x in (cv2.CAP_PROP_FRAME_WIDTH, cv2.CAP_PROP_FRAME_HEIGHT, cv2.CAP_PROP_FPS))
 video_writer = cv2.VideoWriter("distance_output.avi", cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
@@ -331,13 +338,23 @@ while cap.isOpened():
         cv2.rectangle(plot_im, (x1, y1), (x2, y2), color, 2)
         cv2.putText(plot_im, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
 
-    # Display pedestrian warning if any close pedestrian detected
+
+    # Play alert sound if any warning is triggered
+    alert_triggered = False
     if pedestrian_indices:
         cv2.putText(plot_im, "Pedestrian Alert!", (30, 120), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 0, 255), 4)
-
-    # Display collision warning text if collision detected for front car
+        alert_triggered = True
     if collision_indices:
         cv2.putText(plot_im, "Collision Warning!", (30, 60), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 4)
+        alert_triggered = True
+    # Play sound in a separate thread to avoid blocking
+    if alert_triggered:
+        def play_alert():
+            try:
+                playsound(os.path.join(os.path.dirname(__file__), 'alert_sound.mp3'))
+            except Exception:
+                pass
+        threading.Thread(target=play_alert, daemon=True).start()
 
     # Draw distances if reference object is selected
     if reference_idx is not None and len(boxes) > 0 and reference_idx < len(boxes):
