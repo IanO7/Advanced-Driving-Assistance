@@ -168,10 +168,7 @@ class MiDaS:
             # We'll draw boxes on a copy so the colorbar is always on top
             colored_depth_with_boxes = colored_depth.copy()
 
-
-
-
-            # --- Object Detection ---
+            # --- Object Detection and Alert Logic ---
             results = yolo_model(frame)[0]
             if results.boxes is not None:
                 all_class_ids = results.boxes.cls.cpu().numpy().astype(int)
@@ -180,19 +177,13 @@ class MiDaS:
                 all_class_ids = []
                 boxes_all = np.empty((0, 4))
 
-            # Only consider 'person' and 'car' (COCO: person=0, car=2)
             alert_triggered = False
             alert_texts = set()
             alert_indices = set()
-            # Define BGR color range for the leftmost 75% of Inferno colormap (normalized 0-191)
-            # This covers yellow/white (closest in your mapping)
-            # We'll use a mask for normalized values 58-255, then map to BGR using the colormap
-            # 58-255 was empirically found to best match close (yellow) regions for alerting
-            inferno_lut = cv2.applyColorMap(np.arange(0, 256, dtype=np.uint8), cv2.COLORMAP_INFERNO)
-            allowed_bgr = inferno_lut[58:256]
-            mean_depth_values = []
+            # Precompute allowed BGR set for alerting (Inferno colormap, indices 58-255)
+            allowed_bgr_set = set(tuple(map(int, np.array(bgr).flatten())) for bgr in cv2.applyColorMap(np.arange(0, 256, dtype=np.uint8), cv2.COLORMAP_INFERNO)[58:256])
+
             for idx, (box, cls_id) in enumerate(zip(boxes_all, all_class_ids)):
-                # COCO: person=0, car=2, bus=5
                 if cls_id not in [0, 2, 5]:
                     continue
                 x1, y1, x2, y2 = map(int, box)
@@ -201,16 +192,12 @@ class MiDaS:
                 color_region = colored_depth[y1:y2, x1:x2]
                 if color_region.size == 0:
                     continue
-                # Count pixels in the region that match any of the allowed BGR colors (left 75% of Inferno)
                 color_region_flat = color_region.reshape(-1, 3)
-                allowed_bgr_set = set(tuple(map(int, np.array(bgr).flatten())) for bgr in allowed_bgr)
                 match_count = sum(tuple(pixel) in allowed_bgr_set for pixel in color_region_flat)
                 total_pixels = color_region_flat.shape[0]
-                # Alert if 75% of pixels in the box match the allowed yellow BGR range (58-255)
-                # 75% threshold was empirically found to be robust for close object alerting
                 color_match_ratio = match_count / total_pixels if total_pixels > 0 else 0
                 is_alert = color_match_ratio > 0.75
-                print(f"Object: {class_names[cls_id] if cls_id < len(class_names) else str(cls_id)}, match: {match_count}, total: {total_pixels}, color_match_ratio: {color_match_ratio:.2f}, alert: {is_alert} (alert if >0.75 and Inferno 58-255)")
+                print(f"Object: {class_names[cls_id] if cls_id < len(class_names) else str(cls_id)}, match: {match_count}, total: {total_pixels}, color_match_ratio: {color_match_ratio:.2f}, alert: {is_alert}")
                 if is_alert:
                     alert_triggered = True
                     alert_indices.add(idx)
@@ -220,8 +207,6 @@ class MiDaS:
                         alert_texts.add("Pedestrian Alert!")
                     elif cls_id == 5:
                         alert_texts.add("Bus Alert!")
-            if mean_depth_values:
-                print(f"[DEBUG] All mean_depth values this frame: {mean_depth_values}")
 
             # Draw all boxes, highlight alert ones in red
             for idx, (box, cls_id) in enumerate(zip(boxes_all, all_class_ids)):
@@ -282,4 +267,4 @@ if __name__ == "__main__":
     # ---------- Video inference ----------
     # For webcam: source=0
     # For file:   source="cars.mp4"
-    midas.infer_video(source="car_crash.mp4", output_path="depth_video.mp4", display=True)
+    midas.infer_video(source="pedestrian_crash.mp4", output_path="depth_video.mp4", display=True)
