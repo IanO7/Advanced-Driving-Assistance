@@ -291,8 +291,8 @@ while cap.isOpened():
     # Draw the red reference dot at the image center (horizontal center, 80% down)
     image_center_x = plot_im.shape[1] // 2
     image_center_y = int(plot_im.shape[0] * 0.80)
-    COLLISION_THRESHOLD = 200  # Pixel distance for collision warning
-    PEDESTRIAN_THRESHOLD = 335  # Pixel distance for pedestrian alert
+    COLLISION_THRESHOLD = 100  # Pixel distance for collision warning
+    PEDESTRIAN_THRESHOLD = 100  # Pixel distance for pedestrian alert
     collision_indices = set()
     pedestrian_indices = set()
     # Mark cars and pedestrians close to the bottom-center reference point
@@ -381,7 +381,7 @@ while cap.isOpened():
 
     # Draw the red reference dot as the very last step (centered, no rectangle)
     frame_center_x = plot_im.shape[1] // 2
-    frame_ref_y = int(plot_im.shape[0] * 0.80)
+    frame_ref_y = int(plot_im.shape[0] * 0.95)
     print(f"plot_im width: {plot_im.shape[1]}, center_x: {frame_center_x}")
     ref_point = (frame_center_x, frame_ref_y)
     cv2.circle(plot_im, ref_point, 18, (0, 0, 255), -1)  # Larger red filled circle for visibility

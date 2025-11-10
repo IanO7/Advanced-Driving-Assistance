@@ -1,3 +1,38 @@
+## 🟣 Depth-Based Alert Methodology
+
+This project uses a MiDaS deep learning model to estimate a per-pixel depth map for each video frame. The workflow is:
+
+1. **Object Detection:** YOLO detects cars and pedestrians in the RGB frame, drawing bounding boxes.
+2. **Depth Mapping:** The MiDaS model generates a depth map (single-channel, same size as the RGB frame) for the same frame.
+3. **Object-Depth Association:** For each detected object, the code extracts the region of the depth map inside its bounding box.
+4. **Alert Logic:**
+  - The minimum depth value within each object's bounding box is computed.
+  - If this minimum depth is below a configurable threshold, an alert is triggered ("Collision Warning!" or "Pedestrian Alert!").
+  - The alert is only raised if a detected object is close, not just any close region in the depth map.
+5. **Visualization:**
+  - Bounding boxes and labels are drawn on both the RGB frame and the depth map, with alerting objects highlighted in red.
+  - A colorbar shows the mapping from color to depth value.
+
+**Note:** The depth map is only used for objects detected by YOLO. The alert system does not trigger for close regions unless they correspond to a detected car or person.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ALTERNATVE BETHDOLOGY BELOW WTH SSUES AND 2D ETC ABOVE DEPTH BETTER 3D
 
 <h1 align="center">🚗 Advanced Driving Assistance</h1>
 
@@ -21,7 +56,9 @@
 > **Important:**
 > - If you change the camera zoom or field of view, you must recalibrate the pixel thresholds for collision and pedestrian alerts.
 > - The same pixel values do **not** represent the same real-world distance if the zoom changes, even if the video resolution stays the same.
-> - For best results, use unscaled 1920x1080 video and avoid digital zoom.
+> - For best results, use unscaled 1920x1080 video and avoid digital zoom. Dot placement thresholds optimised for unscaled and unzoomed videos ONLY.
+PXEL DONE WTH ZOOM AND SCALE BUT THRESHOLD FX THEN O > DEPTH COMBNE AND ADD NOTES!
+PXEL ESTMATION BUT 2D PXEL DDTANC DEPTH BT BETTER SINCE "3d DEPTH"?
 
 ---
 
