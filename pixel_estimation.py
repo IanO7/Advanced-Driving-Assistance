@@ -291,6 +291,7 @@ while cap.isOpened():
     # Draw the red reference dot at the image center (horizontal center, 80% down)
     image_center_x = plot_im.shape[1] // 2
     image_center_y = int(plot_im.shape[0] * 0.80)
+    # NOT CONFIGURED YET
     COLLISION_THRESHOLD = 100  # Pixel distance for collision warning
     PEDESTRIAN_THRESHOLD = 100  # Pixel distance for pedestrian alert
     collision_indices = set()

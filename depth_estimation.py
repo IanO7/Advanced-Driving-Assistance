@@ -78,11 +78,12 @@ class MiDaS:
         bar = np.linspace(0, 255, height).astype(np.uint8)[::-1].reshape(-1, 1)
         bar_img = np.repeat(bar, width, axis=1)
         bar_color = cv2.applyColorMap(bar_img, colormap)
-        # Add value labels
+        # Add fixed 0-255 labels for the colormap
         bar_color = bar_color.copy()
-        for i, val in enumerate([vmin, (vmin+vmax)/2, vmax]):
-            y = int(i * (height-1) / 2)
-            label = f"{val:.{decimals}f}"
+        # Place 0 at bottom, 128 at middle, 255 at top
+        label_positions = [(height-1, 0), ((height-1)//2, 128), (0, 255)]
+        for y, val in label_positions:
+            label = f"{val}"
             cv2.putText(bar_color, label, (width+5, y+8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 1)
         # Place bar on right side of image
         h, w = image.shape[:2]
@@ -156,9 +157,48 @@ class MiDaS:
 
             # Only consider 'person' and 'car' (COCO: person=0, car=2)
             alert_triggered = False
-            alert_text = ""
-            ALERT_DEPTH_THRESHOLD = 400  # Set to match depth scale (100-500)
+            alert_texts = set()
             alert_indices = set()
+            # Define BGR color range for the leftmost 75% of Inferno colormap (normalized 0-191)
+            # This covers yellow/white (closest in your mapping)
+            # We'll use a mask for normalized values 58-255, then map to BGR using the colormap
+            # 58-255 was empirically found to best match close (yellow) regions for alerting
+            inferno_lut = cv2.applyColorMap(np.arange(0, 256, dtype=np.uint8), cv2.COLORMAP_INFERNO)
+            allowed_bgr = inferno_lut[58:256]
+            mean_depth_values = []
+            for idx, (box, cls_id) in enumerate(zip(boxes_all, all_class_ids)):
+                # COCO: person=0, car=2, bus=5
+                if cls_id not in [0, 2, 5]:
+                    continue
+                x1, y1, x2, y2 = map(int, box)
+                x1, y1 = max(0, x1), max(0, y1)
+                x2, y2 = min(frame.shape[1]-1, x2), min(frame.shape[0]-1, y2)
+                color_region = colored_depth[y1:y2, x1:x2]
+                if color_region.size == 0:
+                    continue
+                # Count pixels in the region that match any of the allowed BGR colors (left 75% of Inferno)
+                color_region_flat = color_region.reshape(-1, 3)
+                allowed_bgr_set = set(tuple(map(int, np.array(bgr).flatten())) for bgr in allowed_bgr)
+                match_count = sum(tuple(pixel) in allowed_bgr_set for pixel in color_region_flat)
+                total_pixels = color_region_flat.shape[0]
+                # Alert if 75% of pixels in the box match the allowed yellow BGR range (58-255)
+                # 75% threshold was empirically found to be robust for close object alerting
+                color_match_ratio = match_count / total_pixels if total_pixels > 0 else 0
+                is_alert = color_match_ratio > 0.75
+                print(f"Object: {class_names[cls_id] if cls_id < len(class_names) else str(cls_id)}, match: {match_count}, total: {total_pixels}, color_match_ratio: {color_match_ratio:.2f}, alert: {is_alert} (alert if >0.75 and Inferno 58-255)")
+                if is_alert:
+                    alert_triggered = True
+                    alert_indices.add(idx)
+                    if cls_id == 2:
+                        alert_texts.add("Collision Warning! (Car)")
+                    elif cls_id == 0:
+                        alert_texts.add("Pedestrian Alert!")
+                    elif cls_id == 5:
+                        alert_texts.add("Bus Alert!")
+            if mean_depth_values:
+                print(f"[DEBUG] All mean_depth values this frame: {mean_depth_values}")
+
+            # Draw all boxes, highlight alert ones in red
             for idx, (box, cls_id) in enumerate(zip(boxes_all, all_class_ids)):
                 if cls_id not in [0, 2]:
                     continue
@@ -168,44 +208,21 @@ class MiDaS:
                 depth_region = depth[y1:y2, x1:x2]
                 if depth_region.size > 0:
                     mean_depth = float(np.mean(depth_region))
-                    min_depth = float(np.min(depth_region))
                 else:
                     mean_depth = float('nan')
-                    min_depth = float('nan')
-                print(f"Object: {class_names[cls_id] if cls_id < len(class_names) else str(cls_id)}, min_depth: {min_depth:.4f}, mean_depth: {mean_depth:.4f}")
-                # Alert if any part of object is close (min depth)
-                is_alert = (not np.isnan(min_depth)) and (min_depth < ALERT_DEPTH_THRESHOLD)
-                if is_alert:
-                    alert_triggered = True
-                    alert_indices.add(idx)
-                    if cls_id == 2:
-                        alert_text = "Collision Warning! (Car)"
-                    elif cls_id == 0:
-                        alert_text = "Pedestrian Alert!"
-                # Draw all boxes, highlight alert ones in red
-                for idx, (box, cls_id) in enumerate(zip(boxes_all, all_class_ids)):
-                    if cls_id not in [0, 2]:
-                        continue
-                    x1, y1, x2, y2 = map(int, box)
-                    x1, y1 = max(0, x1), max(0, y1)
-                    x2, y2 = min(frame.shape[1]-1, x2), min(frame.shape[0]-1, y2)
-                    depth_region = depth[y1:y2, x1:x2]
-                    if depth_region.size > 0:
-                        mean_depth = float(np.mean(depth_region))
-                    else:
-                        mean_depth = float('nan')
-                    if idx in alert_indices:
-                        color = (0, 0, 255)  # Red for alert
-                    else:
-                        color = (0, 255, 0) if cls_id == 2 else (255, 255, 0)
-                    label = f"{class_names[cls_id] if cls_id < len(class_names) else str(cls_id)}: {mean_depth:.2f}"
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                    cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
-                    cv2.rectangle(colored_depth_with_boxes, (x1, y1), (x2, y2), color, 2)
-                    cv2.putText(colored_depth_with_boxes, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+                if idx in alert_indices:
+                    color = (0, 0, 255)  # Red for alert (car or pedestrian)
+                else:
+                    color = (0, 255, 0) if cls_id == 2 else (255, 255, 0)
+                label = f"{class_names[cls_id] if cls_id < len(class_names) else str(cls_id)}"
+                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+                cv2.rectangle(colored_depth_with_boxes, (x1, y1), (x2, y2), color, 2)
+                cv2.putText(colored_depth_with_boxes, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
 
             if alert_triggered:
-                cv2.putText(frame, alert_text, (30, 60), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 4)
+                for i, text in enumerate(sorted(alert_texts)):
+                    cv2.putText(frame, text, (30, 60 + i * 60), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 4)
 
             # Add colorbar after drawing boxes so it is always on top
             colored_depth_with_boxes = self.draw_depth_colorbar(colored_depth_with_boxes, dmin, dmax)
@@ -239,4 +256,4 @@ if __name__ == "__main__":
     # ---------- Video inference ----------
     # For webcam: source=0
     # For file:   source="cars.mp4"
-    midas.infer_video(source="pedestrian_crash.mp4", output_path="depth_video.mp4", display=True)
+    midas.infer_video(source="car_crash.mp4", output_path="depth_video.mp4", display=True)

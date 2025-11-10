@@ -1,6 +1,25 @@
+## Alert Methodology
+
+This project uses MiDaS depth estimation and YOLO object detection to trigger alerts for close objects (person, car, bus) based on the colorized depth map.
+
+**Alert logic:**
+- The Inferno colormap is used to visualize depth. In this mapping, yellow/white (high values, 58–255) represents the closest regions.
+- For each detected object, the percentage of pixels in its bounding box that match the yellow/white Inferno range (BGR values for indices 58–255) is calculated.
+- An alert is triggered if more than 75% of the pixels in the box match this range.
+
+**Why 58–255 and 75%?**
+- These values were empirically determined to best match close (yellow) regions and robustly trigger alerts for objects that are actually close, while avoiding false positives.
+
+**General methodology:**
+1. Detect objects (person, car, bus) with YOLO.
+2. For each object, extract the bounding box region from the colorized depth map.
+3. Count the percentage of pixels in the box that match the allowed yellow/white Inferno range (58–255).
+4. Trigger an alert (visual and sound) if the percentage exceeds 75%.
+
+This approach is robust to depth map noise and works well for real-time close object alerting in driving assistance scenarios.
 ## 🟣 Depth-Based Alert Methodology
 
-This project uses a MiDaS deep learning model to estimate a per-pixel depth map for each video frame. The workflow is:
+This project uses a MiDaS deep learning model to estimate a per-pixel depth map for each video frame. The depth value for each object is relative to the depth map as a whole (i.e., the estimated distance from the camera for each pixel), not relative to a specific reference point. The workflow is:
 
 1. **Object Detection:** YOLO detects cars and pedestrians in the RGB frame, drawing bounding boxes.
 2. **Depth Mapping:** The MiDaS model generates a depth map (single-channel, same size as the RGB frame) for the same frame.
@@ -20,7 +39,12 @@ This project uses a MiDaS deep learning model to estimate a per-pixel depth map 
 
 
 
+MiDaS outputs a raw depth map.
+The code normalizes this map to 0–255.
+Then, cv2.COLORMAP_INFERNO is applied, producing the colorized depth image.
+allowed_bgr = inferno_lut[0:192] selects the BGR colors for the "closer" (left) part of this color
 
+--=> INFERNO THRESHOLD 75% AND ALSO % OF PIXELS IN THAT BOX SATISFY COLOUR BHEFORE THRESHOLD OF INFERNO CHECKED
 
 
 
@@ -42,23 +66,34 @@ ALTERNATVE BETHDOLOGY BELOW WTH SSUES AND 2D ETC ABOVE DEPTH BETTER 3D
 
 ---
 
-## Features
 
-- **YOLOv11 object detection** for cars and pedestrians
-- **Lane detection** using OpenCV (Sobel, Gaussian blur, thresholding)
-- **Pixel-based distance estimation** for collision and pedestrian alerts
-- **Color-coded bounding boxes** for easy visual feedback
 
----
+## Alert Logic (Combined Color and Depth)
 
-## ⚠️ Calibration & Pixel Thresholds
+- The code uses MiDaS for monocular depth estimation and YOLO for object detection.
+- The depth map is normalized and colorized using the Inferno colormap for visualization.
+- **For each detected object, the code checks BOTH:**
+  1. The mean of the raw depth values inside the object's bounding box (mean_depth).
+  2. The percentage of bounding box pixels that match the allowed color range (from the colorized, normalized depth map).
+- **An alert is triggered only if:**
+  - mean_depth is less than the threshold (default: 0.4, lower means closer; see below for tuning)
+  - AND at least 85% of the pixels match the color range (leftmost 75% of Inferno colormap)
 
-> **Important:**
-> - If you change the camera zoom or field of view, you must recalibrate the pixel thresholds for collision and pedestrian alerts.
-> - The same pixel values do **not** represent the same real-world distance if the zoom changes, even if the video resolution stays the same.
-> - For best results, use unscaled 1920x1080 video and avoid digital zoom. Dot placement thresholds optimised for unscaled and unzoomed videos ONLY.
-PXEL DONE WTH ZOOM AND SCALE BUT THRESHOLD FX THEN O > DEPTH COMBNE AND ADD NOTES!
-PXEL ESTMATION BUT 2D PXEL DDTANC DEPTH BT BETTER SINCE "3d DEPTH"?
+This combined approach reduces false positives from per-frame normalization and ensures only truly close objects trigger alerts.
+
+### Tuning the mean_depth threshold
+- Lower threshold (e.g., 0.2): Only very close objects will trigger alerts (less sensitive).
+- Higher threshold (e.g., 1.0, 2.0): Alerts will trigger for objects farther away (more sensitive).
+- You may need to print mean_depth values for your camera/model to find a good threshold for your use case.
+
+## Tuning
+
+- Adjust the color match percentage (default: 85%) for stricter or looser color-based alerting.
+- Adjust the mean depth threshold (default: 0.4) for stricter or looser real-world closeness.
+
+## Known Limitations
+
+- The color-based check is still relative to each frame, but the mean depth check ensures real-world closeness is required for an alert.
 
 ---
 
