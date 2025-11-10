@@ -1,3 +1,4 @@
+from ldw import ldw_overlay
 import threading
 import os
 try:
@@ -168,6 +169,7 @@ class MiDaS:
             # We'll draw boxes on a copy so the colorbar is always on top
             colored_depth_with_boxes = colored_depth.copy()
 
+
             # --- Object Detection and Alert Logic ---
             results = yolo_model(frame)[0]
             if results.boxes is not None:
@@ -238,8 +240,18 @@ class MiDaS:
             # Add colorbar after drawing boxes so it is always on top
             colored_depth_with_boxes = self.draw_depth_colorbar(colored_depth_with_boxes, dmin, dmax)
 
-            # Stack the annotated frame and the annotated depth map
-            combined = self.stack_frames(frame, colored_depth_with_boxes, width, height)
+
+            # Lane Departure Warning overlay (left side)
+            ldw_frame = ldw_overlay(frame)
+            # Draw the guide line and text on the LDW overlay only (not on the frame used for detection)
+            guide_y = int(ldw_frame.shape[0] * 0.95)
+            cv2.line(ldw_frame, (0, guide_y), (ldw_frame.shape[1], guide_y), (0, 255, 255), 2)
+            cv2.putText(ldw_frame, 'Align bonnet with this line for best results', (10, guide_y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+            # Resize LDW overlay and depth map to same size
+            ldw_frame_resized = cv2.resize(ldw_frame, (width // 2, height))
+            depth_resized = cv2.resize(colored_depth_with_boxes, (width // 2, height))
+            # Concatenate LDW overlay (left) and depth map (right)
+            combined = np.hstack((ldw_frame_resized, depth_resized))
 
             if display:
                 cv2.imshow("MiDaS Depth Estimation (Press 'q' to exit)", combined)
@@ -267,4 +279,4 @@ if __name__ == "__main__":
     # ---------- Video inference ----------
     # For webcam: source=0
     # For file:   source="cars.mp4"
-    midas.infer_video(source="pedestrian_crash.mp4", output_path="depth_video.mp4", display=True)
+    midas.infer_video(source="car_crash.mp4", output_path="depth_video.mp4", display=True)

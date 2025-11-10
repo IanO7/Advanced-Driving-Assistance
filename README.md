@@ -28,6 +28,7 @@ This project implements a real-time advanced driving assistance system (ADAS) th
 ### 4. Visualization
 - The original frame and the colorized depth map (with bounding boxes and a colorbar) are displayed side by side for intuitive understanding.
 - Alerts are overlaid on the video feed for immediate feedback.
+- A horizontal yellow guide line is drawn 10% from the bottom of the live display to help you align the vehicle's bonnet (hood) just below it. This improves real-world depth estimation. The line is only visible in the live display, not in saved videos, and is not part of the actual video (just output).
 
 ## Why Depth Map Instead of Pixel-Based (2D) Approaches?
 
@@ -74,7 +75,8 @@ By default, the script processes `pedestrian_crash.mp4` and outputs `depth_video
 - The methodology can be extended to other object classes or integrated with additional sensors for enhanced reliability.
 - 
 - **Next Steps:**
-  - Integrate lane departure warning (LDW) to alert if the vehicle drifts out of its lane.
+  -ENSURE BELOW LINE NOT CONSIDERED, STILL RELEVANT FOR DEPTH BUT REPRESENTS CAR SO DONT IDENIFY AS OBJECT THEN WONT ALERT
+  - Integrate lane departure warning (LDW) to alert if the vehicle drifts out of its lane, PERFECT FEATURE FIRST THEN CAN ADD METHODOLOGY TO README LATER ON
   - If lane detection is effective, restrict collision alerts to only objects within the detected lane, reducing false positives from adjacent lanes.
 
 ## License
