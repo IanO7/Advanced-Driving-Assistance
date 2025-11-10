@@ -34,7 +34,7 @@ This project uses a MiDaS deep learning model to estimate a per-pixel depth map 
 
 **Note:** The depth map is only used for objects detected by YOLO. The alert system does not trigger for close regions unless they correspond to a detected car or person.
 
-
+**dif zoom videos will have different depth map since depth not exact distance jsut relative to depth values in the speciifc video, so generally dont zoom or scale (so filkiw experimentally decided thrshold)
 
 
 

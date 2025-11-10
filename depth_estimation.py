@@ -1,3 +1,28 @@
+import threading
+import os
+try:
+    from playsound import playsound
+except ImportError:
+    def playsound(path):
+        pass  # fallback: do nothing if playsound is not installed
+
+# Prevent overlapping alert sounds (copied from pixel_estimation.py)
+alert_sound_lock = threading.Lock()
+alert_sound_playing = False
+
+def play_alert_once():
+    global alert_sound_playing
+    with alert_sound_lock:
+        if alert_sound_playing:
+            return
+        alert_sound_playing = True
+    try:
+        playsound(os.path.join(os.path.dirname(__file__), 'alert_sound.mp3'))
+    except Exception:
+        pass
+    finally:
+        with alert_sound_lock:
+            alert_sound_playing = False
 import cv2
 import torch
 import numpy as np
@@ -221,6 +246,7 @@ class MiDaS:
                 cv2.putText(colored_depth_with_boxes, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
 
             if alert_triggered:
+                threading.Thread(target=play_alert_once, daemon=True).start()
                 for i, text in enumerate(sorted(alert_texts)):
                     cv2.putText(frame, text, (30, 60 + i * 60), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 4)
 
