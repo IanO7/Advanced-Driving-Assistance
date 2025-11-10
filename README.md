@@ -23,6 +23,8 @@ This project implements a real-time advanced driving assistance system (ADAS) th
 - For each detected object, the system examines the corresponding region in the depth map.
 - The Inferno colormap is used to visualize depth; yellow/white (indices 58–255) represents the closest regions. If more than 75% of the pixels in the object's bounding box match this close-range color (empirically determined), an alert is triggered (visual and audio).
 
+**Note:** The 75% threshold is calculated over the bounding box, but the depth map itself is quite accurate to the true outline and waviness of the object (like a person or car). This means the box may include some background or pixels of different color/depth, since the box is general but the depth map color closely follows the object's shape. The threshold is chosen to balance catching most close objects while avoiding false positives from background pixels inside the box. 
+
 ### 4. Visualization
 - The original frame and the colorized depth map (with bounding boxes and a colorbar) are displayed side by side for intuitive understanding.
 - Alerts are overlaid on the video feed for immediate feedback.
