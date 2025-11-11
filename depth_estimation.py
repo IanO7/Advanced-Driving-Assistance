@@ -269,14 +269,3 @@ class MiDaS:
         print("✅ Inference completed and resources released.")
 
 
-if __name__ == "__main__":
-    """Example usage for both image and video depth estimation."""
-    # midas = MiDaS(model_type="MiDaS_small")
-    midas = MiDaS(model_type="DPT_Hybrid")
-    # midas = MiDaS(model_type="DPT_Large")
-    
-
-    # ---------- Video inference ----------
-    # For webcam: source=0
-    # For file:   source="cars.mp4"
-    midas.infer_video(source="car_crash.mp4", output_path="depth_video.mp4", display=True)

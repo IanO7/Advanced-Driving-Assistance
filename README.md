@@ -63,12 +63,20 @@ pip install -r requirements.txt
 ### 3. Download model weights
 Ensure `yolo11n.pt` (YOLO weights) and the MiDaS model weights are present in the project directory. See Notes below if you need help downloading them.
 
-### 4. Run depth estimation
-Process your video file (e.g., `pedestrian_crash.mp4`) with:
+## 4. Run the system (modular control)
+Run all features (depth estimation, LDW, etc.) using the main controller:
 ```bash
-python depth_estimation.py
+python main.py
 ```
-By default, the script processes `pedestrian_crash.mp4` and outputs `depth_video.mp4`. To use a different video, edit the script's last line.
+By default, this runs all features on `car_crash.mp4` and outputs `output.mp4`.
+
+To enable or disable features:
+```bash
+python main.py --depth        # Only depth estimation
+python main.py --ldw          # Only LDW (if implemented standalone)
+python main.py --depth --ldw  # Both (default)
+```
+Do not run `depth_estimation.py` or `ldw.py` directly. Use `main.py` to control all features.
 
 ## Notes
 - This system is designed for research and prototyping. For deployment, further optimization and testing are recommended.
