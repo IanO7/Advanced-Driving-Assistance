@@ -19,9 +19,14 @@ This project implements a real-time advanced driving assistance system (ADAS) th
 - Utilizes a YOLO (You Only Look Once) model to detect objects such as cars, pedestrians, and buses in each frame.
 - Each detected object is assigned a bounding box and a class label.
 
-### 3. Depth-Aware Alerting (Combining MiDaS Depth Map and YOLO Object Detection)
-- For each detected object, the system examines the corresponding region in the depth map.
-- The Inferno colormap is used to visualize depth; yellow/white (indices 58–255) represents the closest regions. If more than 75% of the pixels in the object's bounding box match this close-range color (empirically determined), an alert is triggered (visual and audio).
+### 3. Object Awareness and Depth-Aware Alerting (Green vs Red Icons)
+
+- For each detected object, the system follows a two-stage logic:
+  - **Stage 1: Awareness (Green Icon)**
+    - If an object (car, bus, truck, or pedestrian) is detected by YOLO/OpenCV, a green icon is shown in the bird’s eye view for that zone. This indicates presence only—no distance or depth check is performed, and no alert sound or warning is triggered.
+  - **Stage 2: Collision Risk (Red Icon)**
+    - The system examines the corresponding region in the depth map for each detected object. The Inferno colormap is used to visualize depth; yellow/white (indices 58–255) represents the closest regions. If more than 75% of the pixels in the object's bounding box match this close-range color (empirically determined), a red icon is shown (alert), and a visual and audio warning is triggered.
+    - The red icon always takes priority over green in a given zone.
 
 **Note:** The 75% threshold is calculated over the bounding box, but the depth map itself is quite accurate to the true outline and waviness of the object (like a person or car). This means the box may include some background or pixels of different color/depth, since the box is general but the depth map color closely follows the object's shape. The threshold is chosen to balance catching most close objects while avoiding false positives from background pixels inside the box. 
 
@@ -29,6 +34,10 @@ This project implements a real-time advanced driving assistance system (ADAS) th
 - The original frame and the colorized depth map (with bounding boxes and a colorbar) are displayed side by side for intuitive understanding.
 - Alerts are overlaid on the video feed for immediate feedback.
 - A horizontal yellow guide line is drawn 10% from the bottom of the live display to help you align the vehicle's bonnet (hood) just below it. This improves real-world depth estimation. The line is only visible in the live display, not in saved videos, and is not part of the actual video (just output).
+
+**Bird’s Eye View Icon Logic:**
+- **Red icon:** Object detected and depth/collision risk confirmed (alert, with sound and visual warning).
+- **Green icon:** Object detected by YOLO/OpenCV, but distance not checked—just shows presence (no sound, no alert, only visual awareness).
 
 ## Why Depth Map Instead of Pixel-Based (2D) Approaches?
 
@@ -40,10 +49,10 @@ This project implements a real-time advanced driving assistance system (ADAS) th
 - Real-time video processing with OpenCV
 - Monocular depth estimation using MiDaS
 - Object detection with YOLO
-- Depth-aware alerting for cars, pedestrians, and buses
+- Depth-aware alerting for cars, pedestrians, buses, and trucks
 - Visual and audio warnings
 - **Lane Departure Warning (LDW) module** (toggleable)
-- **Bird’s Eye View visualization** with icon-based alerts for cars and pedestrians
+- **Bird’s Eye View visualization** with icon-based alerts for cars, pedestrians, buses, and trucks
 - Modular, extensible Python code
 
 ## Getting Started
@@ -83,11 +92,23 @@ Do not run `depth_estimation.py` or `ldw.py` directly. Use `main.py` to control 
 ## Notes
 - This system is designed for research and prototyping. For deployment, further optimization and testing are recommended.
 - The methodology can be extended to other object classes or integrated with additional sensors for enhanced reliability.
-- 
-- **Next Steps:**
+- The system detects cars, pedestrians, buses, and trucks.
+- Bicycles and motorcycles are not included, as stationary bikes/motorcycles are not a collision risk and any person present (cyclist/motorcyclist) would already be detected as a pedestrian.
+
+
+
+**NEXT STEPS
+-cotrol interface for threshold (pixel no need), and features to turn on
+
+-green vehicle detection no alert sound also
+-BEST OPTION IS ANYTHING BELOW THAT WILL NEVER EXIST SINCE BONNET COVERED AND EVEN THOUCHING WONT SO CAN SAY ANYTINGN BELOW CANCL!
+
   -ENSURE BELOW LINE NOT CONSIDERED, STILL RELEVANT FOR DEPTH BUT REPRESENTS CAR SO DONT IDENIFY AS OBJECT THEN WONT ALERT
+
   - Integrate lane departure warning (LDW) to alert if the vehicle drifts out of its lane, PERFECT FEATURE FIRST THEN CAN ADD METHODOLOGY TO README LATER ON
-  - If lane detection is effective, restrict collision alerts to only objects within the detected lane, reducing false positives from adjacent lanes.
+
+  - If lane detection is effective, restrict collision alerts to only objects within the detected lane, reducing false positives from adjacent lanes. But if only in front of lane then no longer have point to have 3 wide view so need to be careful if realyh neded?? => SO IMPORTANT TO WRITE IN README THAT WE ASSUME 3 LANES SO WE DONT DO LANE DETECTION ONLY QITE NORMAL, THUS TOWN ONE LANE WILL OBV HAV EMORE ALERTS BUT MAKES SENSE SINCE CLOSER (VERUSUS 3 LANE DETECTION ), I.E., WANT LANE ONLY DETECTION SO MAKES SENSE IN 3 LANE CASE NO RESREICTION, BUT IF TOEWN CASE THEN OBV MORE ALERT BUTU ONLY ONE LANE BUT NO NEED TO RESTRICT SINCE MAKES SENSE AS MROE CROWDED
+
 
 ## License
 See [LICENSE](LICENSE).
@@ -113,15 +134,14 @@ See [LICENSE](LICENSE).
 
 ## 🎨 Color Coding
 
-- **Car/Bus alert:** Red car icon in bird’s eye view zone (collision risk)
-- **Pedestrian alert:** Red person icon in bird’s eye view zone (collision risk)
-- **Safe:** No icon in zone
+**Bird’s Eye View Icons:**
+- <span style="color:red">Red car/bus/person icon</span>: Alert (collision risk, depth checked, sound and visual warning)
+- <span style="color:green">Green car/bus/person icon</span>: Object detected (YOLO/OpenCV), but depth not checked—shows presence only (no sound, no alert)
+- No icon: Safe (no alert or detection in zone)
 
-Bounding box overlays:
-- <span style="color:red">Red</span>: Alert (car, bus, or pedestrian)
+**Bounding box overlays:**
+- <span style="color:red">Red</span>: Alert (car, bus, truck, or pedestrian)
 - <span style="color:green">Green</span>: Safe car
 - <span style="color:yellow">Yellow</span>: Guide line for bonnet alignment
-
----
 
 ---

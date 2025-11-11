@@ -35,7 +35,192 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 class MiDaS:
     @staticmethod
-    def show_birds_eye_view(frame, car_boxes, window_name="BirdsEyeView"):
+    def show_birds_eye_view(frame, car_boxes, window_name="BirdsEyeView", yolo_results=None):
+        # Parameters for the bird's eye view
+        view_w, view_h = 300, 400
+        car_w, car_h = 60, 100
+        zone_h = 120
+        margin = 20
+        # Create blank white image
+        view = np.ones((view_h, view_w, 3), dtype=np.uint8) * 255
+        # Draw car image in the center bottom
+        car_x = view_w // 2 - car_w // 2
+        car_y = view_h - car_h - margin
+        car_img_path = os.path.join(os.path.dirname(__file__), 'birds_eye_view_car.png')
+        car_img_path_detected = os.path.join(os.path.dirname(__file__), 'red_car.png')
+        if os.path.exists(car_img_path):
+            car_img = cv2.imread(car_img_path, cv2.IMREAD_UNCHANGED)
+            if car_img is not None:
+                car_img = cv2.resize(car_img, (car_w, car_h))
+                # If PNG with alpha, blend
+                if car_img.shape[2] == 4:
+                    alpha = car_img[:,:,3] / 255.0
+                    for c in range(3):
+                        view[car_y:car_y+car_h, car_x:car_x+car_w, c] = (
+                            alpha * car_img[:,:,c] + (1-alpha) * view[car_y:car_y+car_h, car_x:car_x+car_w, c]
+                        ).astype(np.uint8)
+                else:
+                    view[car_y:car_y+car_h, car_x:car_x+car_w] = car_img[:,:,:3]
+        else:
+            cv2.rectangle(view, (car_x, car_y), (car_x + car_w, car_y + car_h), (50, 50, 50), -1)
+            cv2.putText(view, "YOU", (car_x + 5, car_y + car_h//2), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
+        # Define 3 zones in front of the car
+        zone_top = car_y - zone_h
+        zones = [
+            ((margin, zone_top), (car_x, car_y)),  # Left
+            ((car_x, zone_top), (car_x + car_w, car_y)),  # Center
+            ((car_x + car_w, zone_top), (view_w - margin, car_y)),  # Right
+        ]
+        zone_colors = [(200,200,200)]*3
+        # Map car_boxes to zones and track which type of alert (car/bus/truck or pedestrian)
+        zone_alert_types = [None, None, None]  # 'car', 'bus', 'truck', 'pedestrian', or None
+        zone_green_types = [None, None, None]  # For awareness-only (green) icons
+        # First, fill in red alert zones as before
+        for box in car_boxes:
+            x1, y1, x2, y2, alert_type = box if len(box) == 5 else (*box, 'car')
+            box_cx = (x1 + x2) / 2
+            w = frame.shape[1]
+            if box_cx < w/3:
+                zone_colors[0] = (0,0,255)
+                zone_alert_types[0] = alert_type
+            elif box_cx < 2*w/3:
+                zone_colors[1] = (0,0,255)
+                zone_alert_types[1] = alert_type
+            else:
+                zone_colors[2] = (0,0,255)
+                zone_alert_types[2] = alert_type
+        # Now, if yolo_results is provided, fill in green awareness icons for any detected object (no alert)
+        if yolo_results is not None and hasattr(yolo_results, 'boxes') and yolo_results.boxes is not None:
+            all_class_ids = yolo_results.boxes.cls.cpu().numpy().astype(int)
+            boxes_all = yolo_results.boxes.xyxy.cpu().numpy()
+            for box, cls_id in zip(boxes_all, all_class_ids):
+                if cls_id not in [0, 2, 5, 7]:
+                    continue
+                x1, y1, x2, y2 = map(int, box)
+                box_cx = (x1 + x2) / 2
+                w = frame.shape[1]
+                if box_cx < w/3:
+                    zone = 0
+                elif box_cx < 2*w/3:
+                    zone = 1
+                else:
+                    zone = 2
+                # Only set green if not already red alert in that zone
+                if zone_alert_types[zone] is None:
+                    if cls_id == 0:
+                        zone_green_types[zone] = 'pedestrian'
+                    elif cls_id == 2:
+                        zone_green_types[zone] = 'car'
+                    elif cls_id == 5:
+                        zone_green_types[zone] = 'bus'
+                    elif cls_id == 7:
+                        zone_green_types[zone] = 'truck'
+        red_car_img_path = os.path.join(os.path.dirname(__file__), 'red_car.png')
+        red_person_img_path = os.path.join(os.path.dirname(__file__), 'red_person.png')
+        red_bus_img_path = os.path.join(os.path.dirname(__file__), 'red_bus.png')
+        green_car_img_path = os.path.join(os.path.dirname(__file__), 'green_car.png')
+        green_person_img_path = os.path.join(os.path.dirname(__file__), 'green_person.png')
+        green_bus_img_path = os.path.join(os.path.dirname(__file__), 'green_bus.png')
+        red_car_img = None
+        red_person_img = None
+        red_bus_img = None
+        green_car_img = None
+        green_person_img = None
+        green_bus_img = None
+        if os.path.exists(red_car_img_path):
+            red_car_img = cv2.imread(red_car_img_path, cv2.IMREAD_UNCHANGED)
+        if os.path.exists(red_person_img_path):
+            red_person_img = cv2.imread(red_person_img_path, cv2.IMREAD_UNCHANGED)
+        if os.path.exists(red_bus_img_path):
+            red_bus_img = cv2.imread(red_bus_img_path, cv2.IMREAD_UNCHANGED)
+        if os.path.exists(green_car_img_path):
+            green_car_img = cv2.imread(green_car_img_path, cv2.IMREAD_UNCHANGED)
+        if os.path.exists(green_person_img_path):
+            green_person_img = cv2.imread(green_person_img_path, cv2.IMREAD_UNCHANGED)
+        if os.path.exists(green_bus_img_path):
+            green_bus_img = cv2.imread(green_bus_img_path, cv2.IMREAD_UNCHANGED)
+        for i, ((x0, y0), (x1, y1)) in enumerate(zones):
+            # Draw zone background
+            cv2.rectangle(view, (x0, y0), (x1, y1), (220,220,220), -1)
+            cv2.rectangle(view, (x0, y0), (x1, y1), (100,100,100), 2)
+            # Center position for car image in this zone
+            zone_cx = (x0 + x1) // 2
+            zone_cy = (y0 + y1) // 2 + 10
+            y_start = zone_cy - car_h//2
+            x_start = zone_cx - car_w//2
+            if zone_colors[i] == (0,0,255):
+                # Show red car, red bus, or red person image if available, based on alert type
+                alert_type = zone_alert_types[i]
+                img_to_use = None
+                if alert_type == 'pedestrian' and red_person_img is not None:
+                    img_to_use = red_person_img
+                elif alert_type == 'car' and red_car_img is not None:
+                    img_to_use = red_car_img
+                elif alert_type == 'bus' and red_bus_img is not None:
+                    img_to_use = red_bus_img
+                elif alert_type == 'truck' and red_bus_img is not None:
+                    img_to_use = red_bus_img
+                if img_to_use is not None:
+                    car_img_zone = cv2.resize(img_to_use, (car_w, car_h))
+                    if car_img_zone.shape[2] == 4:
+                        alpha = car_img_zone[:,:,3] / 255.0
+                        for c in range(3):
+                            view[y_start:y_start+car_h, x_start:x_start+car_w, c] = (
+                                alpha * car_img_zone[:,:,c] + (1-alpha) * view[y_start:y_start+car_h, x_start:x_start+car_w, c]
+                            ).astype(np.uint8)
+                    else:
+                        view[y_start:y_start+car_h, x_start:x_start+car_w] = car_img_zone[:,:,:3]
+                    # Draw red border
+                    cv2.rectangle(view, (x_start, y_start), (x_start+car_w, y_start+car_h), (0,0,255), 4)
+                elif os.path.exists(car_img_path) and car_img is not None:
+                    car_img_zone = cv2.resize(car_img, (car_w, car_h))
+                    if car_img_zone.shape[2] == 4:
+                        alpha = car_img_zone[:,:,3] / 255.0
+                        for c in range(3):
+                            view[y_start:y_start+car_h, x_start:x_start+car_w, c] = (
+                                alpha * car_img_zone[:,:,c] + (1-alpha) * view[y_start:y_start+car_h, x_start:x_start+car_w, c]
+                            ).astype(np.uint8)
+                    else:
+                        view[y_start:y_start+car_h, x_start:x_start+car_w] = car_img_zone[:,:,:3]
+                    cv2.rectangle(view, (x_start, y_start), (x_start+car_w, y_start+car_h), (0,0,255), 4)
+                else:
+                    # Fallback: just draw red rectangle
+                    cv2.rectangle(view, (x0, y0), (x1, y1), (0,0,255), 4)
+            elif zone_green_types[i] is not None:
+                # Show green awareness icon (no alert, just detected by YOLO)
+                green_type = zone_green_types[i]
+                img_to_use = None
+                if green_type == 'pedestrian' and green_person_img is not None:
+                    img_to_use = green_person_img
+                elif green_type == 'car' and green_car_img is not None:
+                    img_to_use = green_car_img
+                elif green_type == 'bus' and green_bus_img is not None:
+                    img_to_use = green_bus_img
+                elif green_type == 'truck' and green_bus_img is not None:
+                    img_to_use = green_bus_img
+                if img_to_use is not None:
+                    car_img_zone = cv2.resize(img_to_use, (car_w, car_h))
+                    if car_img_zone.shape[2] == 4:
+                        alpha = car_img_zone[:,:,3] / 255.0
+                        for c in range(3):
+                            view[y_start:y_start+car_h, x_start:x_start+car_w, c] = (
+                                alpha * car_img_zone[:,:,c] + (1-alpha) * view[y_start:y_start+car_h, x_start:x_start+car_w, c]
+                            ).astype(np.uint8)
+                    else:
+                        view[y_start:y_start+car_h, x_start:x_start+car_w] = car_img_zone[:,:,:3]
+        # Draw car image again at the bottom (your car)
+        if os.path.exists(car_img_path) and 'car_img' in locals() and car_img is not None:
+            if car_img.shape[2] == 4:
+                alpha = car_img[:,:,3] / 255.0
+                for c in range(3):
+                    view[car_y:car_y+car_h, car_x:car_x+car_w, c] = (
+                        alpha * car_img[:,:,c] + (1-alpha) * view[car_y:car_y+car_h, car_x:car_x+car_w, c]
+                    ).astype(np.uint8)
+            else:
+                view[car_y:car_y+car_h, car_x:car_x+car_w] = car_img[:,:,:3]
+        else:
+            cv2.rectangle(view, (car_x, car_y), (car_x + car_w, car_y + car_h), (50, 50, 50), -1)
+        cv2.imshow(window_name, view)
         # Parameters for the bird's eye view
         view_w, view_h = 300, 400
         car_w, car_h = 60, 100
@@ -73,8 +258,10 @@ class MiDaS:
             ((car_x + car_w, zone_top), (view_w - margin, car_y)),  # Right
         ]
         zone_colors = [(200,200,200)]*3
-        # Map car_boxes to zones and track which type of alert (car/bus or pedestrian)
-        zone_alert_types = [None, None, None]  # 'car', 'pedestrian', or None
+        # Map car_boxes to zones and track which type of alert (car/bus/truck or pedestrian)
+        zone_alert_types = [None, None, None]  # 'car', 'bus', 'truck', 'pedestrian', or None
+        zone_green_types = [None, None, None]  # For awareness-only (green) icons
+        # First, fill in red alert zones as before
         for box in car_boxes:
             x1, y1, x2, y2, alert_type = box if len(box) == 5 else (*box, 'car')
             box_cx = (x1 + x2) / 2
@@ -88,16 +275,58 @@ class MiDaS:
             else:
                 zone_colors[2] = (0,0,255)
                 zone_alert_types[2] = alert_type
+        # Now, if yolo_results is provided, fill in green awareness icons for any detected object (no alert)
+        if yolo_results is not None and hasattr(yolo_results, 'boxes') and yolo_results.boxes is not None:
+            all_class_ids = yolo_results.boxes.cls.cpu().numpy().astype(int)
+            boxes_all = yolo_results.boxes.xyxy.cpu().numpy()
+            for box, cls_id in zip(boxes_all, all_class_ids):
+                if cls_id not in [0, 2, 5, 7]:
+                    continue
+                x1, y1, x2, y2 = map(int, box)
+                box_cx = (x1 + x2) / 2
+                w = frame.shape[1]
+                if box_cx < w/3:
+                    zone = 0
+                elif box_cx < 2*w/3:
+                    zone = 1
+                else:
+                    zone = 2
+                # Only set green if not already red alert in that zone
+                if zone_alert_types[zone] is None:
+                    if cls_id == 0:
+                        zone_green_types[zone] = 'pedestrian'
+                    elif cls_id == 2:
+                        zone_green_types[zone] = 'car'
+                    elif cls_id == 5:
+                        zone_green_types[zone] = 'bus'
+                    elif cls_id == 7:
+                        zone_green_types[zone] = 'truck'
         # Draw car image in each zone (if car detected, highlight with red border)
 
         red_car_img_path = os.path.join(os.path.dirname(__file__), 'red_car.png')
         red_person_img_path = os.path.join(os.path.dirname(__file__), 'red_person.png')
+        red_bus_img_path = os.path.join(os.path.dirname(__file__), 'red_bus.png')
+        green_car_img_path = os.path.join(os.path.dirname(__file__), 'green_car.png')
+        green_person_img_path = os.path.join(os.path.dirname(__file__), 'green_person.png')
+        green_bus_img_path = os.path.join(os.path.dirname(__file__), 'green_bus.png')
         red_car_img = None
         red_person_img = None
+        red_bus_img = None
+        green_car_img = None
+        green_person_img = None
+        green_bus_img = None
         if os.path.exists(red_car_img_path):
             red_car_img = cv2.imread(red_car_img_path, cv2.IMREAD_UNCHANGED)
         if os.path.exists(red_person_img_path):
             red_person_img = cv2.imread(red_person_img_path, cv2.IMREAD_UNCHANGED)
+        if os.path.exists(red_bus_img_path):
+            red_bus_img = cv2.imread(red_bus_img_path, cv2.IMREAD_UNCHANGED)
+        if os.path.exists(green_car_img_path):
+            green_car_img = cv2.imread(green_car_img_path, cv2.IMREAD_UNCHANGED)
+        if os.path.exists(green_person_img_path):
+            green_person_img = cv2.imread(green_person_img_path, cv2.IMREAD_UNCHANGED)
+        if os.path.exists(green_bus_img_path):
+            green_bus_img = cv2.imread(green_bus_img_path, cv2.IMREAD_UNCHANGED)
 
         for i, ((x0, y0), (x1, y1)) in enumerate(zones):
             # Draw zone background
@@ -109,13 +338,17 @@ class MiDaS:
             y_start = zone_cy - car_h//2
             x_start = zone_cx - car_w//2
             if zone_colors[i] == (0,0,255):
-                # Show red car or red person image if available, based on alert type
+                # Show red car, red bus, or red person image if available, based on alert type
                 alert_type = zone_alert_types[i]
                 img_to_use = None
                 if alert_type == 'pedestrian' and red_person_img is not None:
                     img_to_use = red_person_img
                 elif alert_type == 'car' and red_car_img is not None:
                     img_to_use = red_car_img
+                elif alert_type == 'bus' and red_bus_img is not None:
+                    img_to_use = red_bus_img
+                elif alert_type == 'truck' and red_bus_img is not None:
+                    img_to_use = red_bus_img
                 if img_to_use is not None:
                     car_img_zone = cv2.resize(img_to_use, (car_w, car_h))
                     if car_img_zone.shape[2] == 4:
@@ -142,6 +375,28 @@ class MiDaS:
                 else:
                     # Fallback: just draw red rectangle
                     cv2.rectangle(view, (x0, y0), (x1, y1), (0,0,255), 4)
+            elif zone_green_types[i] is not None:
+                # Show green awareness icon (no alert, just detected by YOLO)
+                green_type = zone_green_types[i]
+                img_to_use = None
+                if green_type == 'pedestrian' and green_person_img is not None:
+                    img_to_use = green_person_img
+                elif green_type == 'car' and green_car_img is not None:
+                    img_to_use = green_car_img
+                elif green_type == 'bus' and green_bus_img is not None:
+                    img_to_use = green_bus_img
+                elif green_type == 'truck' and green_bus_img is not None:
+                    img_to_use = green_bus_img
+                if img_to_use is not None:
+                    car_img_zone = cv2.resize(img_to_use, (car_w, car_h))
+                    if car_img_zone.shape[2] == 4:
+                        alpha = car_img_zone[:,:,3] / 255.0
+                        for c in range(3):
+                            view[y_start:y_start+car_h, x_start:x_start+car_w, c] = (
+                                alpha * car_img_zone[:,:,c] + (1-alpha) * view[y_start:y_start+car_h, x_start:x_start+car_w, c]
+                            ).astype(np.uint8)
+                    else:
+                        view[y_start:y_start+car_h, x_start:x_start+car_w] = car_img_zone[:,:,:3]
         # Draw car image again at the bottom (your car)
         if os.path.exists(car_img_path) and car_img is not None:
             if car_img.shape[2] == 4:
@@ -154,7 +409,6 @@ class MiDaS:
                 view[car_y:car_y+car_h, car_x:car_x+car_w] = car_img[:,:,:3]
         else:
             cv2.rectangle(view, (car_x, car_y), (car_x + car_w, car_y + car_h), (50, 50, 50), -1)
-        cv2.imshow(window_name, view)
     """Performs monocular depth estimation using Intel Labs MiDaS models.
 
     This class provides utilities to load a pre-trained MiDaS model,
@@ -308,7 +562,7 @@ class MiDaS:
 
             car_boxes_birdseye = []
             for idx, (box, cls_id) in enumerate(zip(boxes_all, all_class_ids)):
-                if cls_id not in [0, 2, 5, 0]:
+                if cls_id not in [0, 2, 5, 7]:
                     continue
                 x1, y1, x2, y2 = map(int, box)
                 x1, y1 = max(0, x1), max(0, y1)
@@ -333,12 +587,16 @@ class MiDaS:
                         car_boxes_birdseye.append((x1, y1, x2, y2, 'pedestrian'))
                     elif cls_id == 5:
                         alert_texts.add("Bus Alert!")
-                        car_boxes_birdseye.append((x1, y1, x2, y2, 'car'))
+                        car_boxes_birdseye.append((x1, y1, x2, y2, 'bus'))
+                    elif cls_id == 7:
+                        alert_texts.add("Truck Alert!")
+                        car_boxes_birdseye.append((x1, y1, x2, y2, 'truck'))
 
             # Draw all boxes, highlight alert ones in red
             for idx, (box, cls_id) in enumerate(zip(boxes_all, all_class_ids)):
-                if cls_id not in [0, 2]:
+                if cls_id not in [0, 2, 5, 7]:
                     continue
+                # Use same color logic for all alert types
                 x1, y1, x2, y2 = map(int, box)
                 x1, y1 = max(0, x1), max(0, y1)
                 x2, y2 = min(frame.shape[1]-1, x2), min(frame.shape[0]-1, y2)
@@ -380,8 +638,8 @@ class MiDaS:
 
             if display:
                 cv2.imshow("MiDaS Depth Estimation (Press 'q' to exit)", combined)
-                # Show bird's eye view window
-                self.show_birds_eye_view(frame, car_boxes_birdseye)
+                # Show bird's eye view window (pass yolo results for awareness icons)
+                self.show_birds_eye_view(frame, car_boxes_birdseye, yolo_results=results)
 
             if writer:
                 writer.write(combined)
