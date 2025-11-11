@@ -42,6 +42,8 @@ This project implements a real-time advanced driving assistance system (ADAS) th
 - Object detection with YOLO
 - Depth-aware alerting for cars, pedestrians, and buses
 - Visual and audio warnings
+- **Lane Departure Warning (LDW) module** (toggleable)
+- **Bird’s Eye View visualization** with icon-based alerts for cars and pedestrians
 - Modular, extensible Python code
 
 ## Getting Started
@@ -64,7 +66,7 @@ pip install -r requirements.txt
 Ensure `yolo11n.pt` (YOLO weights) and the MiDaS model weights are present in the project directory. See Notes below if you need help downloading them.
 
 ## 4. Run the system (modular control)
-Run all features (depth estimation, LDW, etc.) using the main controller:
+Use the main controller to run and configure features:
 ```bash
 python main.py
 ```
@@ -92,8 +94,9 @@ See [LICENSE](LICENSE).
 
 ## 📁 Repository Contents
 
-- `pixel_estimation.py` — Main script: runs YOLO detection, draws lane overlays, and raises alerts
-- `edge_detection.py` — Lane detection helper functions (thresholding, Sobel, blur)
+- `main.py` — Main controller: enables/disables features (depth, LDW, bird’s eye view)
+- `depth_estimation.py` — Core logic: depth estimation, object detection, alerting, bird’s eye view visualization
+- `ldw.py` — Lane detection and overlay logic (modular LDW)
 - `yolo11n.pt` — YOLOv11 weights
 
 ---
@@ -110,11 +113,15 @@ See [LICENSE](LICENSE).
 
 ## 🎨 Color Coding
 
-- **Car detection:**
-  - <span style="color:red">Red</span>: Car within collision threshold (danger)
-  - <span style="color:green">Green</span>: Safe car
-- **Pedestrian detection:**
-  - <span style="color:magenta">Magenta</span>: Pedestrian alert (close)
-  - <span style="color:cyan">Cyan</span>: Safe pedestrian
+- **Car/Bus alert:** Red car icon in bird’s eye view zone (collision risk)
+- **Pedestrian alert:** Red person icon in bird’s eye view zone (collision risk)
+- **Safe:** No icon in zone
+
+Bounding box overlays:
+- <span style="color:red">Red</span>: Alert (car, bus, or pedestrian)
+- <span style="color:green">Green</span>: Safe car
+- <span style="color:yellow">Yellow</span>: Guide line for bonnet alignment
+
+---
 
 ---
