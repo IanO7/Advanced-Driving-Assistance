@@ -25,7 +25,7 @@ This project implements a real-time advanced driving assistance system (ADAS) th
   - **Stage 1: Awareness (Green Icon)**
     - If an object (car, bus, truck, or pedestrian) is detected by YOLO/OpenCV, a green icon is shown in the bird’s eye view for that zone. This indicates presence only—no distance or depth check is performed, and no alert sound or warning is triggered.
   - **Stage 2: Collision Risk (Red Icon)**
-    - The system examines the corresponding region in the depth map for each detected object. The Inferno colormap is used to visualize depth; yellow/white (indices 58–255) represents the closest regions. If more than 75% of the pixels in the object's bounding box match this close-range color (empirically determined), a red icon is shown (alert), and a visual and audio warning is triggered.
+    - The system examines the corresponding region in the depth map for each detected object. The Inferno colormap is used to visualize depth; yellow/white (indices 58–255 determined experimentally) represents the closest regions. If more than 75% of the pixels in the object's bounding box match this close-range color (empirically determined), a red icon is shown (alert), and a visual and audio warning is triggered.
     - The red icon always takes priority over green in a given zone.
 
 **Note:** The 75% threshold is calculated over the bounding box, but the depth map itself is quite accurate to the true outline and waviness of the object (like a person or car). This means the box may include some background or pixels of different color/depth, since the box is general but the depth map color closely follows the object's shape. The threshold is chosen to balance catching most close objects while avoiding false positives from background pixels inside the box. 
@@ -98,15 +98,13 @@ Do not run `depth_estimation.py` or `ldw.py` directly. Use `main.py` to control 
 - The methodology can be extended to other object classes or integrated with additional sensors for enhanced reliability.
 - The system detects cars, pedestrians, buses, and trucks.
 - Bicycles and motorcycles are not included, as stationary bikes/motorcycles are not a collision risk and any person present (cyclist/motorcyclist) would already be detected as a pedestrian.
-
+- This system assumes a typical multi-lane road and does not restrict collision alerts to detected lanes. In single-lane or crowded town scenarios, more alerts may occur, which is expected due to closer objects. Lane-based alert restriction is not applied, as the multi-zone logic is designed for all types of roads.
 
 
 **NEXT STEPS
--cotrol interface for threshold (pixel no need), and features to turn on
+- cotrol interface for threshold (pixel no need), and features to turn on
+- Integrate lane departure warning (LDW) to alert if the vehicle drifts out of its lane, PERFECT FEATURE FIRST THEN CAN ADD METHODOLOGY TO README LATER ON
 
-  - Integrate lane departure warning (LDW) to alert if the vehicle drifts out of its lane, PERFECT FEATURE FIRST THEN CAN ADD METHODOLOGY TO README LATER ON
-
-  - If lane detection is effective, restrict collision alerts to only objects within the detected lane, reducing false positives from adjacent lanes. But if only in front of lane then no longer have point to have 3 wide view so need to be careful if realyh neded?? => SO IMPORTANT TO WRITE IN README THAT WE ASSUME 3 LANES SO WE DONT DO LANE DETECTION ONLY QITE NORMAL, THUS TOWN ONE LANE WILL OBV HAV EMORE ALERTS BUT MAKES SENSE SINCE CLOSER (VERUSUS 3 LANE DETECTION ), I.E., WANT LANE ONLY DETECTION SO MAKES SENSE IN 3 LANE CASE NO RESREICTION, BUT IF TOEWN CASE THEN OBV MORE ALERT BUTU ONLY ONE LANE BUT NO NEED TO RESTRICT SINCE MAKES SENSE AS MROE CROWDED
 
 
 ## License

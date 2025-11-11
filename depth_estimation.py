@@ -18,7 +18,7 @@ def play_alert_once():
             return
         alert_sound_playing = True
     try:
-        playsound(os.path.join(os.path.dirname(__file__), 'alert_sound.mp3'))
+        playsound(os.path.join(os.path.dirname(__file__), 'assets', 'alert_sound.mp3'))
     except Exception:
         pass
     finally:
@@ -58,8 +58,8 @@ class MiDaS:
         # Draw car image in the center bottom
         car_x = view_w // 2 - car_w // 2
         car_y = view_h - car_h - margin
-        car_img_path = os.path.join(os.path.dirname(__file__), 'birds_eye_view_car.png')
-        car_img_path_detected = os.path.join(os.path.dirname(__file__), 'red_car.png')
+        car_img_path = os.path.join(os.path.dirname(__file__), 'assets', 'birds_eye_view_car.png')
+        car_img_path_detected = os.path.join(os.path.dirname(__file__), 'assets', 'red_car.png')
         if os.path.exists(car_img_path):
             car_img = cv2.imread(car_img_path, cv2.IMREAD_UNCHANGED)
             if car_img is not None:
@@ -129,12 +129,12 @@ class MiDaS:
                         zone_green_types[zone] = 'bus'
                     elif cls_id == 7:
                         zone_green_types[zone] = 'truck'
-        red_car_img_path = os.path.join(os.path.dirname(__file__), 'red_car.png')
-        red_person_img_path = os.path.join(os.path.dirname(__file__), 'red_person.png')
-        red_bus_img_path = os.path.join(os.path.dirname(__file__), 'red_bus.png')
-        green_car_img_path = os.path.join(os.path.dirname(__file__), 'green_car.png')
-        green_person_img_path = os.path.join(os.path.dirname(__file__), 'green_person.png')
-        green_bus_img_path = os.path.join(os.path.dirname(__file__), 'green_bus.png')
+        red_car_img_path = os.path.join(os.path.dirname(__file__), 'assets', 'red_car.png')
+        red_person_img_path = os.path.join(os.path.dirname(__file__), 'assets', 'red_person.png')
+        red_bus_img_path = os.path.join(os.path.dirname(__file__), 'assets', 'red_bus.png')
+        green_car_img_path = os.path.join(os.path.dirname(__file__), 'assets', 'green_car.png')
+        green_person_img_path = os.path.join(os.path.dirname(__file__), 'assets', 'green_person.png')
+        green_bus_img_path = os.path.join(os.path.dirname(__file__), 'assets', 'green_bus.png')
         red_car_img = None
         red_person_img = None
         red_bus_img = None
@@ -245,8 +245,8 @@ class MiDaS:
         # Draw car image in the center bottom
         car_x = view_w // 2 - car_w // 2
         car_y = view_h - car_h - margin
-        car_img_path = os.path.join(os.path.dirname(__file__), 'birds_eye_view_car.png')
-        car_img_path_detected = os.path.join(os.path.dirname(__file__), 'red_car.png')
+        car_img_path = os.path.join(os.path.dirname(__file__), 'assets', 'birds_eye_view_car.png')
+        car_img_path_detected = os.path.join(os.path.dirname(__file__), 'assets', 'red_car.png')
         if os.path.exists(car_img_path):
             car_img = cv2.imread(car_img_path, cv2.IMREAD_UNCHANGED)
             if car_img is not None:
@@ -317,12 +317,12 @@ class MiDaS:
                         zone_green_types[zone] = 'truck'
         # Draw car image in each zone (if car detected, highlight with red border)
 
-        red_car_img_path = os.path.join(os.path.dirname(__file__), 'red_car.png')
-        red_person_img_path = os.path.join(os.path.dirname(__file__), 'red_person.png')
-        red_bus_img_path = os.path.join(os.path.dirname(__file__), 'red_bus.png')
-        green_car_img_path = os.path.join(os.path.dirname(__file__), 'green_car.png')
-        green_person_img_path = os.path.join(os.path.dirname(__file__), 'green_person.png')
-        green_bus_img_path = os.path.join(os.path.dirname(__file__), 'green_bus.png')
+        red_car_img_path = os.path.join(os.path.dirname(__file__), 'assets', 'red_car.png')
+        red_person_img_path = os.path.join(os.path.dirname(__file__), 'assets', 'red_person.png')
+        red_bus_img_path = os.path.join(os.path.dirname(__file__), 'assets', 'red_bus.png')
+        green_car_img_path = os.path.join(os.path.dirname(__file__), 'assets', 'green_car.png')
+        green_person_img_path = os.path.join(os.path.dirname(__file__), 'assets', 'green_person.png')
+        green_bus_img_path = os.path.join(os.path.dirname(__file__), 'assets', 'green_bus.png')
         red_car_img = None
         red_person_img = None
         red_bus_img = None
