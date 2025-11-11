@@ -21,7 +21,7 @@ This project implements a real-time advanced driving assistance system (ADAS) th
 
 ### 3. Object Awareness and Depth-Aware Alerting (Green vs Red Icons)
 
-- For each detected object, the system follows a two-stage logic:
+- For each detected object, the system follows a two-stage logic (BUT CODE PROCESS IS ALWAYS RED THEN GREEN FOR ALL DRAWING IN MAP/LHS/VISUAL CASES CORRECT TO ACHIEVE BELOW WHEN PRESENTED/VISUALISED):
   - **Stage 1: Awareness (Green Icon)**
     - If an object (car, bus, truck, or pedestrian) is detected by YOLO/OpenCV, a green icon is shown in the bird’s eye view for that zone. This indicates presence only—no distance or depth check is performed, and no alert sound or warning is triggered.
   - **Stage 2: Collision Risk (Red Icon)**
@@ -34,6 +34,10 @@ This project implements a real-time advanced driving assistance system (ADAS) th
 - The original frame and the colorized depth map (with bounding boxes and a colorbar) are displayed side by side for intuitive understanding.
 - Alerts are overlaid on the video feed for immediate feedback.
 - A horizontal yellow guide line is drawn 10% from the bottom of the live display to help you align the vehicle's bonnet (hood) just below it. This improves real-world depth estimation. The line is only visible in the live display, not in saved videos, and is not part of the actual video (just output).
+
+**Note:** Any detected object whose bounding box is completely below this yellow line (i.e., in the bonnet area) is excluded from all alert and awareness logic. Only objects at least partially above or touching the line are considered for alerts or icons.
+
+**Best practice:** For maximum clarity, fill the rectangle under the yellow line with a bonnet overlay (e.g., a gray or car-shaped region). This visually indicates that the area is not scanned for objects, even though depth is still estimated there, and prevents confusion about undetected objects in that region.
 
 **Bird’s Eye View Icon Logic:**
 - **Red icon:** Object detected and depth/collision risk confirmed (alert, with sound and visual warning).
@@ -99,11 +103,6 @@ Do not run `depth_estimation.py` or `ldw.py` directly. Use `main.py` to control 
 
 **NEXT STEPS
 -cotrol interface for threshold (pixel no need), and features to turn on
-
--green vehicle detection no alert sound also
--BEST OPTION IS ANYTHING BELOW THAT WILL NEVER EXIST SINCE BONNET COVERED AND EVEN THOUCHING WONT SO CAN SAY ANYTINGN BELOW CANCL!
-
-  -ENSURE BELOW LINE NOT CONSIDERED, STILL RELEVANT FOR DEPTH BUT REPRESENTS CAR SO DONT IDENIFY AS OBJECT THEN WONT ALERT
 
   - Integrate lane departure warning (LDW) to alert if the vehicle drifts out of its lane, PERFECT FEATURE FIRST THEN CAN ADD METHODOLOGY TO README LATER ON
 

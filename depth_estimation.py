@@ -36,6 +36,18 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 class MiDaS:
     @staticmethod
     def show_birds_eye_view(frame, car_boxes, window_name="BirdsEyeView", yolo_results=None):
+        # --- Bird's Eye View Icon Logic (matches README) ---
+        # For each detected object, the system follows a two-stage logic:
+        #   1. Stage 1: Awareness (Green Icon)
+        #      - If an object (car, bus, truck, or pedestrian) is detected by YOLO/OpenCV,
+        #        a green icon is shown in the bird’s eye view for that zone.
+        #      - This indicates presence only—no distance or depth check is performed, and no alert sound or warning is triggered.
+        #   2. Stage 2: Collision Risk (Red Icon)
+        #      - The system examines the corresponding region in the depth map for each detected object.
+        #      - If more than 75% of the pixels in the object's bounding box match the close-range Inferno colormap,
+        #        a red icon is shown (alert), and a visual and audio warning is triggered.
+        #      - The red icon always takes priority over green in a given zone.
+
         # Parameters for the bird's eye view
         view_w, view_h = 300, 400
         car_w, car_h = 60, 100
@@ -76,6 +88,7 @@ class MiDaS:
         zone_alert_types = [None, None, None]  # 'car', 'bus', 'truck', 'pedestrian', or None
         zone_green_types = [None, None, None]  # For awareness-only (green) icons
         # First, fill in red alert zones as before
+        # (Red is checked/set first, so it always takes priority over green)
         for box in car_boxes:
             x1, y1, x2, y2, alert_type = box if len(box) == 5 else (*box, 'car')
             box_cx = (x1 + x2) / 2
@@ -90,6 +103,7 @@ class MiDaS:
                 zone_colors[2] = (0,0,255)
                 zone_alert_types[2] = alert_type
         # Now, if yolo_results is provided, fill in green awareness icons for any detected object (no alert)
+        # (Green is only set if there is no red alert in that zone)
         if yolo_results is not None and hasattr(yolo_results, 'boxes') and yolo_results.boxes is not None:
             all_class_ids = yolo_results.boxes.cls.cpu().numpy().astype(int)
             boxes_all = yolo_results.boxes.xyxy.cpu().numpy()
@@ -561,12 +575,17 @@ class MiDaS:
             allowed_bgr_set = set(tuple(map(int, np.array(bgr).flatten())) for bgr in cv2.applyColorMap(np.arange(0, 256, dtype=np.uint8), cv2.COLORMAP_INFERNO)[58:256])
 
             car_boxes_birdseye = []
+            # Exclude objects completely below the yellow guide line (bonnet area)
+            guide_y = int(frame.shape[0] * 0.95)
             for idx, (box, cls_id) in enumerate(zip(boxes_all, all_class_ids)):
                 if cls_id not in [0, 2, 5, 7]:
                     continue
                 x1, y1, x2, y2 = map(int, box)
                 x1, y1 = max(0, x1), max(0, y1)
                 x2, y2 = min(frame.shape[1]-1, x2), min(frame.shape[0]-1, y2)
+                # Exclude if the entire box is below the yellow line
+                if y1 > guide_y:
+                    continue
                 color_region = colored_depth[y1:y2, x1:x2]
                 if color_region.size == 0:
                     continue
@@ -600,6 +619,9 @@ class MiDaS:
                 x1, y1, x2, y2 = map(int, box)
                 x1, y1 = max(0, x1), max(0, y1)
                 x2, y2 = min(frame.shape[1]-1, x2), min(frame.shape[0]-1, y2)
+                # Exclude if the entire box is below the yellow line
+                if y1 > guide_y:
+                    continue
                 depth_region = depth[y1:y2, x1:x2]
                 if depth_region.size > 0:
                     mean_depth = float(np.mean(depth_region))
@@ -629,7 +651,7 @@ class MiDaS:
             # Draw the guide line and text on the LDW overlay only (not on the frame used for detection)
             guide_y = int(ldw_frame.shape[0] * 0.95)
             cv2.line(ldw_frame, (0, guide_y), (ldw_frame.shape[1], guide_y), (0, 255, 255), 2)
-            cv2.putText(ldw_frame, 'Align bonnet with this line for best results', (10, guide_y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+            cv2.putText(ldw_frame, 'Align bonnet with this line for best results (BELOW NOT CONSIDERED IN ALGORITHM)', (10, guide_y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
             # Resize LDW overlay and depth map to same size
             ldw_frame_resized = cv2.resize(ldw_frame, (width // 2, height))
             depth_resized = cv2.resize(colored_depth_with_boxes, (width // 2, height))
