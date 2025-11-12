@@ -62,6 +62,18 @@ This project implements a real-time advanced driving assistance system (ADAS) th
 
 ## Getting Started
 
+### Anaconda Navigator GUI Method
+
+1. In Anaconda Navigator, create a new environment (e.g., `adas_project`).
+2. Launch the Anaconda Prompt from Navigator (not VS Code or standard terminal).
+3. Run:
+  ```powershell
+  conda activate adas_project
+  cd C:\project_folder_destination
+  pip install -r requirements.txt
+  ```
+4. Done. Always use the Anaconda Prompt for running and installing, VS Code terminal won't work.
+
 ### 1. Create a Python virtual environment
 ```bash
 python -m venv venv
@@ -76,22 +88,13 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Download model weights
-Ensure `yolo11n.pt` (YOLO weights) and the MiDaS model weights are present in the project directory. See Notes below if you need help downloading them.
-
-## 4. Run the system (modular control)
+## 4. Run the system 
 Use the main controller to run and configure features:
 ```bash
 python main.py
 ```
 By default, this runs all features on `car_crash.mp4` and outputs `output.mp4`.
 
-To enable or disable features:
-```bash
-python main.py --depth        # Only depth estimation
-python main.py --ldw          # Only LDW (if implemented standalone)
-python main.py --depth --ldw  # Both (default)
-```
 Do not run `depth_estimation.py` or `ldw.py` directly. Use `main.py` to control all features.
 
 ## Notes
