@@ -1,203 +1,116 @@
-# Lane Departure Warning (LDW) overlay module
-import numpy as np
-import cv2
+"""Lane Detection (LDW Overlay) Module.
 
-def region_selection(image):
-    mask = np.zeros_like(image)
-    if len(image.shape) > 2:
-        channel_count = image.shape[2]
-        ignore_mask_color = (255,) * channel_count
-    else:
-        ignore_mask_color = 255
-    rows, cols = image.shape[:2]
-    bottom_left  = [cols * 0.1, rows * 0.95]
-    top_left     = [cols * 0.4, rows * 0.6]
-    bottom_right = [cols * 0.9, rows * 0.95]
-    top_right    = [cols * 0.6, rows * 0.6]
-    vertices = np.array([[bottom_left, top_left, top_right, bottom_right]], dtype=np.int32)
-    cv2.fillPoly(mask, vertices, ignore_mask_color)
-    masked_image = cv2.bitwise_and(image, mask)
-    return masked_image
+Rewritten to use the provided pipeline implementation while keeping the
+public API identical (the function `ldw_overlay(frame)` returns a BGR image
+with lane markings overlayed). Depth estimation and main program imports
+remain unaffected.
 
-def hough_transform(image):
-    rho = 1
-    theta = np.pi/180
-    threshold = 20
-    minLineLength = 8  # Lowered to detect short dashed segments
-    maxLineGap = 80    # Reduced to avoid linking distant dashes
-    return cv2.HoughLinesP(image, rho=rho, theta=theta, threshold=threshold,
-                           minLineLength=minLineLength, maxLineGap=maxLineGap)
+Pipeline summary:
+1. ROI masking (quadrilateral)
+2. Gaussian blur
+3. Canny edge detection
+4. Probabilistic Hough transform
+5. Averaging left/right lane segments into solid lines
+6. Optional polygon fill between lanes
+"""
 
-def average_slope_intercept(lines):
-    left_lines = []
-    left_weights = []
-    right_lines = []
-    right_weights = []
-    if lines is None:
-        return None, None
-    for line in lines:
-        for x1, y1, x2, y2 in line:
-            if x1 == x2:
-                continue
-            slope = (y2 - y1) / (x2 - x1)
-            intercept = y1 - (slope * x1)
-            length = np.sqrt(((y2 - y1) ** 2) + ((x2 - x1) ** 2))
-            if slope < 0:
-                left_lines.append((slope, intercept))
-                left_weights.append(length)
-            else:
-                right_lines.append((slope, intercept))
-                right_weights.append(length)
-    left_lane = np.dot(left_weights, left_lines) / np.sum(left_weights) if len(left_weights) > 0 else None
-    right_lane = np.dot(right_weights, right_lines) / np.sum(right_weights) if len(right_weights) > 0 else None
-    return left_lane, right_lane
-
-def pixel_points(y1, y2, line):
-    if line is None:
-        return None
-    slope, intercept = line
-    # Avoid division by zero, inf, nan, or nearly horizontal lines
-    if slope == 0 or not np.isfinite(slope) or not np.isfinite(intercept):
-        return None
-    # Skip nearly horizontal lines (abs(slope) < 0.5)
-    if abs(slope) < 0.5:
-        return None
-    try:
-        x1 = int((y1 - intercept)/slope)
-        x2 = int((y2 - intercept)/slope)
-    except (ZeroDivisionError, OverflowError, ValueError):
-        return None
-    y1 = int(y1)
-    y2 = int(y2)
-    return ((x1, y1), (x2, y2))
-
-def lane_lines(image, lines):
-    left_lane, right_lane = average_slope_intercept(lines)
-    y1 = image.shape[0]
-    y2 = int(y1 * 0.6)
-    left_line = pixel_points(y1, y2, left_lane)
-    right_line = pixel_points(y1, y2, right_lane)
-    return left_line, right_line
-
-def draw_lane_lines(image, lines, color=[0, 255, 0], thickness=8):
-    line_image = np.zeros_like(image)
-    for line in lines:
-        if line is not None:
-            cv2.line(line_image, *line, color, thickness)
-    return cv2.addWeighted(image, 1.0, line_image, 1.0, 0.0)
-
-def ldw_overlay(image):
-    """
-    Applies lane detection overlay to the input image and returns the result.
-    Args:
-        image: BGR image (numpy array)
-    Returns:
-        image with lane lines overlay
-    """
-    # Convert to grayscale
-    grayscale = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    # Gaussian blur
-    blur = cv2.GaussianBlur(grayscale, (5, 5), 0)
-    # Canny edge detection
-    edges = cv2.Canny(blur, 50, 150)
-    # Region of interest
-    region = region_selection(edges)
-    # Hough transform
-    hough = hough_transform(region)
-    # Draw lane lines
-    result = draw_lane_lines(image, lane_lines(image, hough))
-    return result
 import cv2
 import numpy as np
 
-def region_selection(image):
-    mask = np.zeros_like(image)
-    if len(image.shape) > 2:
-        channel_count = image.shape[2]
-        ignore_mask_color = (255,) * channel_count
-    else:
-        ignore_mask_color = 255
-    rows, cols = image.shape[:2]
-    bottom_left  = [cols * 0.1, rows * 0.95]
-    top_left     = [cols * 0.4, rows * 0.6]
-    bottom_right = [cols * 0.9, rows * 0.95]
-    top_right    = [cols * 0.6, rows * 0.6]
-    vertices = np.array([[bottom_left, top_left, top_right, bottom_right]], dtype=np.int32)
-    cv2.fillPoly(mask, vertices, ignore_mask_color)
-    masked_image = cv2.bitwise_and(image, mask)
-    return masked_image
+def region_of_interest(img, vertices):
+    """Apply a mask to keep only the region of interest (ROI)."""
+    mask = np.zeros_like(img)
+    match_mask_color = 255
+    cv2.fillPoly(mask, vertices, match_mask_color)
+    return cv2.bitwise_and(img, mask)
 
-def hough_transform(image):
-    rho = 1
-    theta = np.pi/180
-    threshold = 20
-    minLineLength = 20
-    maxLineGap = 500
-    return cv2.HoughLinesP(image, rho=rho, theta=theta, threshold=threshold,
-                          minLineLength=minLineLength, maxLineGap=maxLineGap)
+def draw_lines(img, lines, color=[0, 255, 0], thickness=5):
+    """Draw single averaged left/right lane lines and softly fill polygon."""
+    img[:] = 0  # clear before drawing
+    left_line = None
+    right_line = None
+    if lines is not None:
+        left_lines = []
+        right_lines = []
+        for line in lines:
+            for x1, y1, x2, y2 in line:
+                if x2 - x1 == 0:
+                    continue
+                slope = (y2 - y1) / (x2 - x1)
+                if abs(slope) < 0.3:  # skip nearly horizontal
+                    continue
+                if slope < 0:
+                    left_lines.append((x1, y1, x2, y2))
+                else:
+                    right_lines.append((x1, y1, x2, y2))
 
-def average_slope_intercept(lines):
-    left_lines = []
-    left_weights = []
-    right_lines = []
-    right_weights = []
-    if lines is None:
-        return None, None
-    for line in lines:
-        for x1, y1, x2, y2 in line:
-            if x1 == x2:
-                continue
-            slope = (y2 - y1) / (x2 - x1)
-            intercept = y1 - (slope * x1)
-            length = np.sqrt(((y2 - y1) ** 2) + ((x2 - x1) ** 2))
-            if slope < 0:
-                left_lines.append((slope, intercept))
-                left_weights.append(length)
-            else:
-                right_lines.append((slope, intercept))
-                right_weights.append(length)
-    left_lane = np.dot(left_weights, left_lines) / np.sum(left_weights) if len(left_weights) > 0 else None
-    right_lane = np.dot(right_weights, right_lines) / np.sum(right_weights) if len(right_weights) > 0 else None
-    return left_lane, right_lane
+        def make_line(points, y_min, y_max):
+            if len(points) == 0:
+                return None
+            x_coords = []
+            y_coords = []
+            for x1, y1, x2, y2 in points:
+                x_coords += [x1, x2]
+                y_coords += [y1, y2]
+            poly = np.polyfit(y_coords, x_coords, 1)  # x = m*y + b
+            x_start = int(poly[0] * y_max + poly[1])
+            x_end = int(poly[0] * y_min + poly[1])
+            return (x_start, y_max, x_end, y_min)
 
-def pixel_points(y1, y2, line):
-    if line is None:
-        return None
-    slope, intercept = line
-    # Avoid division by zero, inf, or nan
-    if slope == 0 or not np.isfinite(slope) or not np.isfinite(intercept):
-        return None
-    try:
-        x1 = int((y1 - intercept)/slope)
-        x2 = int((y2 - intercept)/slope)
-    except (ZeroDivisionError, OverflowError, ValueError):
-        return None
-    y1 = int(y1)
-    y2 = int(y2)
-    return ((x1, y1), (x2, y2))
+        height = img.shape[0]
+        y_min = int(height * 0.6)
+        y_max = height
+        left_line = make_line(left_lines, y_min, y_max)
+        right_line = make_line(right_lines, y_min, y_max)
 
-def lane_lines(image, lines):
-    left_lane, right_lane = average_slope_intercept(lines)
-    y1 = image.shape[0]
-    y2 = y1 * 0.6
-    left_line = pixel_points(y1, y2, left_lane)
-    right_line = pixel_points(y1, y2, right_lane)
-    return left_line, right_line
+        if left_line is not None and right_line is not None:
+            polygon_points = np.array([
+                [left_line[0], left_line[1]],
+                [left_line[2], left_line[3]],
+                [right_line[2], right_line[3]],
+                [right_line[0], right_line[1]]
+            ], dtype=np.int32)
+            overlay = img.copy()
+            cv2.fillPoly(overlay, [polygon_points], color=(180, 220, 255))
+            cv2.addWeighted(overlay, 0.4, img, 0.6, 0, dst=img)
 
-def draw_lane_lines(image, lines, color=[0, 0, 255], thickness=8):
-    line_image = np.zeros_like(image)
-    for line in lines:
+    for line in [left_line, right_line]:
         if line is not None:
-            cv2.line(line_image, *line, color, thickness)
-    return cv2.addWeighted(image, 1.0, line_image, 1.0, 0.0)
+            x1, y1, x2, y2 = line
+            cv2.line(img, (x1, y1), (x2, y2), color, thickness)
+
+def _pipeline(image):
+    """Internal pipeline returning original image with lane overlay."""
+    # NOTE: The provided code uses RGB->GRAY but frames are BGR from OpenCV.
+    # We keep the original constant from the snippet for fidelity; adjust to
+    # COLOR_BGR2GRAY if color weighting consistency is required.
+    gray_image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    blurred = cv2.GaussianBlur(gray_image, (5, 5), 0)
+    cannyed_image = cv2.Canny(blurred, 50, 150)
+    height, width = image.shape[:2]
+    roi_vertices = [
+        (int(width * 0.1), int(height * 0.95)),
+        (int(width * 0.4), int(height * 0.6)),
+        (int(width * 0.6), int(height * 0.6)),
+        (int(width * 0.9), int(height * 0.95))
+    ]
+    cropped_image = region_of_interest(cannyed_image, np.array([roi_vertices], np.int32))
+    lines = cv2.HoughLinesP(
+        cropped_image,
+        rho=6,
+        theta=np.pi / 60,
+        threshold=160,
+        lines=np.array([]),
+        minLineLength=40,
+        maxLineGap=25
+    )
+    line_image = np.zeros_like(image)
+    draw_lines(line_image, lines)
+    final_image = cv2.addWeighted(image, 0.8, line_image, 1, 0)
+    return final_image
 
 def ldw_overlay(frame):
-    # Lane detection overlay for a single frame
-    grayscale = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(grayscale, (5, 5), 0)
-    edges = cv2.Canny(blur, 50, 150)
-    region = region_selection(edges)
-    hough = hough_transform(region)
-    lines = lane_lines(frame, hough)
-    overlay = draw_lane_lines(frame, lines)
-    return overlay
+    """Public API: apply lane detection overlay to a BGR frame and return BGR frame."""
+    return _pipeline(frame)
+
+__all__ = ["ldw_overlay"]

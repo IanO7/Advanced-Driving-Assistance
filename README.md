@@ -16,12 +16,12 @@ This project implements a real-time advanced driving assistance system (ADAS) th
 - The depth map provides per-pixel distance information, allowing the system to understand the 3D structure of the scene.
 
 ### 2. Object Detection
-- Utilizes a YOLO (You Only Look Once) model to detect objects such as cars, pedestrians, and buses in each frame.
+- Based on `depth_estimation.py`. Utilizes a YOLO (You Only Look Once) model to detect objects such as cars, pedestrians, and buses in each frame.
 - Each detected object is assigned a bounding box and a class label.
 
 ### 3. Object Awareness and Depth-Aware Alerting (Green vs Red Icons)
 
-- For each detected object, the system follows a two-stage logic (BUT CODE PROCESS IS ALWAYS RED THEN GREEN FOR ALL DRAWING IN MAP/LHS/VISUAL CASES CORRECT TO ACHIEVE BELOW WHEN PRESENTED/VISUALISED):
+- Based on `depth_estimation.py`. For each detected object, the system follows a two-stage logic (BUT CODE PROCESS IS ALWAYS RED THEN GREEN FOR ALL DRAWING IN MAP/LHS/VISUAL CASES CORRECT TO ACHIEVE BELOW WHEN PRESENTED/VISUALISED):
   - **Stage 1: Awareness (Green Icon)**
     - If an object (car, bus, truck, or pedestrian) is detected by YOLO/OpenCV, a green icon is shown in the bird’s eye view for that zone. This indicates presence only—no distance or depth check is performed, and no alert sound or warning is triggered.
   - **Stage 2: Collision Risk (Red Icon)**
@@ -30,7 +30,10 @@ This project implements a real-time advanced driving assistance system (ADAS) th
 
 **Note:** The 75% threshold is calculated over the bounding box, but the depth map itself is quite accurate to the true outline and waviness of the object (like a person or car). This means the box may include some background or pixels of different color/depth, since the box is general but the depth map color closely follows the object's shape. The threshold is chosen to balance catching most close objects while avoiding false positives from background pixels inside the box. 
 
-### 4. Visualization
+### 4. Lane Departure Warning (LDW): 
+- Based on `ldw.py`. Detects lane lines in the video frame using edge detection, region masking, and Hough transform, then overlays the detected lanes and highlights the drivable area on the original image.
+
+### 5. Visualization
 - The original frame and the colorized depth map (with bounding boxes and a colorbar) are displayed side by side for intuitive understanding.
 - Alerts are overlaid on the video feed for immediate feedback.
 - A horizontal yellow guide line is drawn 10% from the bottom of the live display to help you align the vehicle's bonnet (hood) just below it. This improves real-world depth estimation. The line is only visible in the live display, not in saved videos, and is not part of the actual video (just output).
@@ -56,7 +59,7 @@ This project implements a real-time advanced driving assistance system (ADAS) th
 - Object detection with YOLO
 - Depth-aware alerting for cars, pedestrians, buses, and trucks
 - Visual and audio warnings
-- **Lane Departure Warning (LDW) module** (toggleable)
+- Lane detection (lane departure warning alert to be integrated later)
 - **Bird’s Eye View visualization** with icon-based alerts for cars, pedestrians, buses, and trucks
 - Modular, extensible Python code
 
@@ -107,8 +110,7 @@ Do not run `depth_estimation.py` or `ldw.py` directly. Use `main.py` to control 
 
 **NEXT STEPS
 - cotrol interface for threshold (pixel no need), and features to turn on
-- Integrate lane departure warning (LDW) to alert if the vehicle drifts out of its lane, PERFECT FEATURE FIRST THEN CAN ADD METHODOLOGY TO README LATER ON
-
+-calibration of sensitivity, 75%ok general, but which depth to alert close is sensitivity value to calibrate beforehand! size !=  matter since depth map clearly outlines accurately
 
 
 ## License

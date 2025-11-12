@@ -9,7 +9,7 @@ def main():
     parser = argparse.ArgumentParser(description="Advanced Driving Assistance System")
     parser.add_argument('--depth', action='store_true', help='Enable depth estimation')
     parser.add_argument('--ldw', action='store_true', help='Enable lane departure warning')
-    parser.add_argument('--video', type=str, default='test_videos/pedestrian_crash.mp4', help='Input video file or camera index')
+    parser.add_argument('--video', type=str, default='test_videos/california_drive.mp4', help='Input video file or camera index')
     parser.add_argument('--output', type=str, default='output.mp4', help='Output video file')
     args = parser.parse_args()
 
