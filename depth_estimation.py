@@ -32,10 +32,15 @@ from ultralytics import YOLO
 import os
 warnings.filterwarnings("ignore", category=FutureWarning)
 
+# Default sensitivity cutoff for bird's-eye alerting (Inferno colormap index)
+# Lower values => more aggressive (objects further away may trigger). 58 is the
+# project-recommended default determined experimentally.
+BIRDSEYE_SENSITIVITY_DEFAULT = 58
+
 
 class MiDaS:
     @staticmethod
-    def show_birds_eye_view(frame, car_boxes, window_name="BirdsEyeView", yolo_results=None):
+    def show_birds_eye_view(frame, car_boxes, window_name="BirdsEyeView", yolo_results=None, sensitivity_value=None):
         # --- Bird's Eye View Icon Logic (matches README) ---
         # For each detected object, the system follows a two-stage logic:
         #   1. Stage 1: Awareness (Green Icon)
@@ -234,6 +239,12 @@ class MiDaS:
                 view[car_y:car_y+car_h, car_x:car_x+car_w] = car_img[:,:,:3]
         else:
             cv2.rectangle(view, (car_x, car_y), (car_x + car_w, car_y + car_h), (50, 50, 50), -1)
+        # Draw sensitivity value at the top of the window if provided
+        if sensitivity_value is not None:
+            text = f"Sensitivity: {sensitivity_value}"
+            if sensitivity_value == BIRDSEYE_SENSITIVITY_DEFAULT:
+                text += " (recommended)"
+            cv2.putText(view, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,0), 2, cv2.LINE_AA)
         cv2.imshow(window_name, view)
         # Parameters for the bird's eye view
         view_w, view_h = 300, 400
@@ -544,6 +555,16 @@ class MiDaS:
         class_names = yolo_model.model.names if hasattr(yolo_model.model, 'names') else [str(i) for i in range(100)]
 
         print("🚀 Starting video depth inference... Press 'q' to quit.")
+        # If we're displaying UI, create the BirdsEyeView window and a sensitivity
+        # trackbar so the user can tune the Inferno colormap cutoff (0-255).
+        if display:
+            try:
+                cv2.namedWindow("BirdsEyeView", cv2.WINDOW_NORMAL)
+                # trackbar value is the lower bound index into the Inferno colormap
+                cv2.createTrackbar('Sensitivity', 'BirdsEyeView', BIRDSEYE_SENSITIVITY_DEFAULT, 255, lambda x: None)
+            except Exception:
+                # If window creation fails for any reason (headless env), fall back silently
+                pass
 
         while True:
             ret, frame = cap.read()
@@ -571,8 +592,22 @@ class MiDaS:
             alert_triggered = False
             alert_texts = set()
             alert_indices = set()
-            # Precompute allowed BGR set for alerting (Inferno colormap, indices 58-255)
-            allowed_bgr_set = set(tuple(map(int, np.array(bgr).flatten())) for bgr in cv2.applyColorMap(np.arange(0, 256, dtype=np.uint8), cv2.COLORMAP_INFERNO)[58:256])
+            # Read sensitivity cutoff from the trackbar (if available) and compute
+            # the allowed BGR set for alerting. The cutoff is the lower colormap
+            # index considered 'close' (higher index = closer in Inferno mapping).
+            if display:
+                try:
+                    cutoff = int(cv2.getTrackbarPos('Sensitivity', 'BirdsEyeView'))
+                except Exception:
+                    cutoff = BIRDSEYE_SENSITIVITY_DEFAULT
+            else:
+                cutoff = BIRDSEYE_SENSITIVITY_DEFAULT
+
+            cutoff = max(0, min(255, cutoff))
+            allowed_bgr_set = set(
+                tuple(map(int, np.array(bgr).flatten()))
+                for bgr in cv2.applyColorMap(np.arange(0, 256, dtype=np.uint8), cv2.COLORMAP_INFERNO)[cutoff:256]
+            )
 
             car_boxes_birdseye = []
             # Exclude objects completely below the yellow guide line (bonnet area)
@@ -660,8 +695,8 @@ class MiDaS:
 
             if display:
                 cv2.imshow("MiDaS Depth Estimation (Press 'q' to exit)", combined)
-                # Show bird's eye view window (pass yolo results for awareness icons)
-                self.show_birds_eye_view(frame, car_boxes_birdseye, yolo_results=results)
+                # Show bird's eye view window (pass yolo results for awareness icons and sensitivity value)
+                self.show_birds_eye_view(frame, car_boxes_birdseye, yolo_results=results, sensitivity_value=cutoff)
 
             if writer:
                 writer.write(combined)
