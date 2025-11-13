@@ -93,10 +93,31 @@ pip install -r requirements.txt
 
 ## 4. Run the system 
 Use the main controller to run and configure features:
-```bash
+```powershell
 python main.py
 ```
-By default, this runs all features on `car_crash.mp4` and outputs `output.mp4`.
+
+### Simple toggles (no-args Run button)
+If you just press Run (F5) in VS Code or run `python main.py` with no arguments, the defaults are controlled at the top of `main.py`:
+- `USE_CAMERA_DEFAULT`: set `True` to default to webcam, `False` to default to a video file
+- `CAMERA_INDEX_DEFAULT`: which webcam index to use (usually `0`)
+- `VIDEO_PATH_DEFAULT`: default MP4 path (e.g., `test_videos/california_drive.mp4`)
+- `ENABLE_DEPTH_DEFAULT` / `ENABLE_LDW_DEFAULT`: which features are enabled when no flags are passed
+
+CLI flags always override these toggles.
+
+### Command-line options (override toggles)
+- Run with a video file:
+```powershell
+python main.py --video "test_videos/california_drive.mp4" --output output.mp4
+```
+
+- Run with webcam (index 0):
+```powershell
+python main.py --camera 0 --output output.mp4
+```
+
+Tip: `--video 0` is also treated as webcam index `0`.
 
 Do not run `depth_estimation.py` or `ldw.py` directly. Use `main.py` to control all features.
 
