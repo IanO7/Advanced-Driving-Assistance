@@ -581,7 +581,14 @@ class MiDaS:
 
 
             # --- Object Detection and Alert Logic ---
-            results = yolo_model(frame)[0]
+            # Restrict to key classes for speed and clarity; reduce input size; suppress logs
+            results = yolo_model(
+                frame,
+                classes=[0, 2, 5, 7],  # person, car, bus, truck
+                imgsz=480,
+                conf=0.35,
+                verbose=False
+            )[0]
             if results.boxes is not None:
                 all_class_ids = results.boxes.cls.cpu().numpy().astype(int)
                 boxes_all = results.boxes.xyxy.cpu().numpy()
@@ -629,7 +636,8 @@ class MiDaS:
                 total_pixels = color_region_flat.shape[0]
                 color_match_ratio = match_count / total_pixels if total_pixels > 0 else 0
                 is_alert = color_match_ratio > 0.75
-                print(f"Object: {class_names[cls_id] if cls_id < len(class_names) else str(cls_id)}, match: {match_count}, total: {total_pixels}, color_match_ratio: {color_match_ratio:.2f}, alert: {is_alert}")
+                # Commented below to save memory
+                # print(f"Object: {class_names[cls_id] if cls_id < len(class_names) else str(cls_id)}, match: {match_count}, total: {total_pixels}, color_match_ratio: {color_match_ratio:.2f}, alert: {is_alert}")
                 if is_alert:
                     alert_triggered = True
                     alert_indices.add(idx)

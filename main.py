@@ -9,7 +9,7 @@ from ldw import ldw_overlay
 # Change these values and just press Run (F5) with no arguments
 # CLI flags (e.g., --camera, --video) will always override these defaults.
 # ================================
-USE_CAMERA_DEFAULT = True           # True: use webcam by default, False: use video file by default
+USE_CAMERA_DEFAULT = False           # True: use webcam by default, False: use video file by default
 CAMERA_INDEX_DEFAULT = 0             # Which camera index to use when USE_CAMERA_DEFAULT is True
 VIDEO_PATH_DEFAULT = "test_videos/california_drive.mp4"  # Default video when USE_CAMERA_DEFAULT is False
 
@@ -27,7 +27,7 @@ def main():
     parser.add_argument('--depth', action='store_true', help='Enable depth estimation')
     parser.add_argument('--ldw', action='store_true', help='Enable lane departure warning')
     # Default is None so we can decide from simple toggles when no args are passed
-    parser.add_argument('--video', type=str, default=None, help='Input video file path. If you want to use a camera, pass --camera or set --video to a numeric index like 0.')
+    parser.add_argument('--video', type=str, default=None, help='Input source: path to a video file. To use a webcam, pass --camera or set --video to a numeric index like 0.')
     parser.add_argument('--camera', type=int, default=None, help='Camera index to use (e.g., 0 for default webcam). Overrides --video when provided.')
     parser.add_argument('--save', action='store_true', help='Save the visualized output to a video file (overrides default toggles).')
     parser.add_argument('--output', type=str, default=None, help='Output video file path. If not provided but --save is set, uses OUTPUT_PATH_DEFAULT from main.py.')
