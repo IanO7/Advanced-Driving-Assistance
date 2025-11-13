@@ -9,13 +9,17 @@ from ldw import ldw_overlay
 # Change these values and just press Run (F5) with no arguments
 # CLI flags (e.g., --camera, --video) will always override these defaults.
 # ================================
-USE_CAMERA_DEFAULT = False           # True: use webcam by default, False: use video file by default
+USE_CAMERA_DEFAULT = True           # True: use webcam by default, False: use video file by default
 CAMERA_INDEX_DEFAULT = 0             # Which camera index to use when USE_CAMERA_DEFAULT is True
 VIDEO_PATH_DEFAULT = "test_videos/california_drive.mp4"  # Default video when USE_CAMERA_DEFAULT is False
 
 # Feature defaults when no --depth/--ldw flags are provided
 ENABLE_DEPTH_DEFAULT = True
 ENABLE_LDW_DEFAULT = True
+
+# Output saving controls (for Run button / no-arg runs)
+SAVE_OUTPUT_DEFAULT = False                 # True to save by default, False to not save by default
+OUTPUT_PATH_DEFAULT = "output.mp4"         # Default filename when saving is enabled without --output
 
 
 def main():
@@ -25,7 +29,8 @@ def main():
     # Default is None so we can decide from simple toggles when no args are passed
     parser.add_argument('--video', type=str, default=None, help='Input video file path. If you want to use a camera, pass --camera or set --video to a numeric index like 0.')
     parser.add_argument('--camera', type=int, default=None, help='Camera index to use (e.g., 0 for default webcam). Overrides --video when provided.')
-    parser.add_argument('--output', type=str, default='output.mp4', help='Output video file')
+    parser.add_argument('--save', action='store_true', help='Save the visualized output to a video file (overrides default toggles).')
+    parser.add_argument('--output', type=str, default=None, help='Output video file path. If not provided but --save is set, uses OUTPUT_PATH_DEFAULT from main.py.')
     args = parser.parse_args()
 
     # If no features are specified, use simple defaults
@@ -61,8 +66,25 @@ def main():
                 source = VIDEO_PATH_DEFAULT
                 print(f"[INFO] No input args provided. Using default video '{source}' (from toggles).")
 
+        # Decide output saving based on priority:
+        # 1) If --output is provided -> save to that path
+        # 2) Else if --save is provided -> save to OUTPUT_PATH_DEFAULT
+        # 3) Else -> use SAVE_OUTPUT_DEFAULT toggle
+        if args.output is not None:
+            output_path = args.output
+            print(f"[INFO] Saving output to '{output_path}' (from --output).")
+        elif args.save:
+            output_path = OUTPUT_PATH_DEFAULT
+            print(f"[INFO] Saving output to '{output_path}' (from --save).")
+        else:
+            output_path = OUTPUT_PATH_DEFAULT if SAVE_OUTPUT_DEFAULT else None
+            if output_path:
+                print(f"[INFO] Saving output to '{output_path}' (from default toggle).")
+            else:
+                print("[INFO] Not saving output (from default toggle).")
+
         # You can add logic to pass args.ldw to MiDaS or handle overlays here
-        midas.infer_video(source=source, output_path=args.output, display=True)
+        midas.infer_video(source=source, output_path=output_path, display=True)
     elif args.ldw:
         print("[INFO] Running only LDW overlay (example, not standalone)")
         # You would need to implement a video loop here if you want LDW only
