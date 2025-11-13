@@ -169,3 +169,9 @@ See [LICENSE](LICENSE).
 - <span style="color:yellow">Yellow</span>: Guide line for bonnet alignment
 
 ---
+
+## References
+
+This project includes small portions and ideas inspired by:
+- MiDaS (Intel ISL): https://github.com/isl-org/MiDaS
+- Lane Detection (reference implementation): https://github.com/maheshpaulj/Lane_Detection
