@@ -25,54 +25,53 @@ def region_of_interest(img, vertices):
     return cv2.bitwise_and(img, mask)
 
 def draw_lines(img, lines, color=[0, 255, 0], thickness=5):
-    """Draw single averaged left/right lane lines and softly fill polygon."""
+    """Draw single averaged left/right lane lines and softly fill polygon (vectorized)."""
     img[:] = 0  # clear before drawing
     left_line = None
     right_line = None
-    if lines is not None:
-        left_lines = []
-        right_lines = []
-        for line in lines:
-            for x1, y1, x2, y2 in line:
-                if x2 - x1 == 0:
-                    continue
-                slope = (y2 - y1) / (x2 - x1)
-                if abs(slope) < 0.3:  # skip nearly horizontal
-                    continue
-                if slope < 0:
-                    left_lines.append((x1, y1, x2, y2))
-                else:
-                    right_lines.append((x1, y1, x2, y2))
 
-        def make_line(points, y_min, y_max):
-            if len(points) == 0:
-                return None
-            x_coords = []
-            y_coords = []
-            for x1, y1, x2, y2 in points:
-                x_coords += [x1, x2]
-                y_coords += [y1, y2]
-            poly = np.polyfit(y_coords, x_coords, 1)  # x = m*y + b
-            x_start = int(poly[0] * y_max + poly[1])
-            x_end = int(poly[0] * y_min + poly[1])
-            return (x_start, y_max, x_end, y_min)
+    if lines is not None and len(lines) > 0:
+        arr = np.reshape(lines, (-1, 4))
+        # Filter out vertical lines to avoid division by zero
+        non_vertical = arr[:, 2] != arr[:, 0]
+        arr = arr[non_vertical]
+        if arr.shape[0] > 0:
+            slopes = (arr[:, 3] - arr[:, 1]) / (arr[:, 2] - arr[:, 0])
+            # Skip nearly horizontal segments
+            steep = np.abs(slopes) >= 0.3
+            arr = arr[steep]
+            slopes = slopes[steep]
 
-        height = img.shape[0]
-        y_min = int(height * 0.6)
-        y_max = height
-        left_line = make_line(left_lines, y_min, y_max)
-        right_line = make_line(right_lines, y_min, y_max)
+            left_points = arr[slopes < 0]
+            right_points = arr[slopes > 0]
 
-        if left_line is not None and right_line is not None:
-            polygon_points = np.array([
-                [left_line[0], left_line[1]],
-                [left_line[2], left_line[3]],
-                [right_line[2], right_line[3]],
-                [right_line[0], right_line[1]]
-            ], dtype=np.int32)
-            overlay = img.copy()
-            cv2.fillPoly(overlay, [polygon_points], color=(180, 220, 255))
-            cv2.addWeighted(overlay, 0.4, img, 0.6, 0, dst=img)
+            def make_line(points, y_min, y_max):
+                if points.shape[0] == 0:
+                    return None
+                # Build x/y coordinate arrays from segment endpoints
+                x_coords = np.concatenate([points[:, 0], points[:, 2]])
+                y_coords = np.concatenate([points[:, 1], points[:, 3]])
+                poly = np.polyfit(y_coords, x_coords, 1)  # x = m*y + b
+                x_start = int(poly[0] * y_max + poly[1])
+                x_end = int(poly[0] * y_min + poly[1])
+                return (x_start, y_max, x_end, y_min)
+
+            height = img.shape[0]
+            y_min = int(height * 0.6)
+            y_max = height
+            left_line = make_line(left_points, y_min, y_max)
+            right_line = make_line(right_points, y_min, y_max)
+
+            if left_line is not None and right_line is not None:
+                polygon_points = np.array([
+                    [left_line[0], left_line[1]],
+                    [left_line[2], left_line[3]],
+                    [right_line[2], right_line[3]],
+                    [right_line[0], right_line[1]]
+                ], dtype=np.int32)
+                overlay = img.copy()
+                cv2.fillPoly(overlay, [polygon_points], color=(180, 220, 255))
+                cv2.addWeighted(overlay, 0.4, img, 0.6, 0, dst=img)
 
     for line in [left_line, right_line]:
         if line is not None:

@@ -38,6 +38,51 @@ BIRDSEYE_SENSITIVITY_DEFAULT = 58
 
 
 class MiDaS:
+    # Simple caches to avoid per-frame IO and rendering
+    assets_cache = {}
+    colorbar_cache = {}
+    resized_assets_cache = {}
+
+    @staticmethod
+    def _load_asset(path):
+        """Load an image (possibly with alpha) once and cache it."""
+        img = MiDaS.assets_cache.get(path)
+        if img is None and os.path.exists(path):
+            img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+            MiDaS.assets_cache[path] = img
+        return img
+
+    @staticmethod
+    def _get_resized_asset(path, size):
+        """Return a cached resized (w,h) version of the asset (including alpha)."""
+        key = (path, size)
+        cached = MiDaS.resized_assets_cache.get(key)
+        if cached is not None:
+            return cached
+        base = MiDaS._load_asset(path)
+        if base is None:
+            return None
+        resized = cv2.resize(base, size)
+        MiDaS.resized_assets_cache[key] = resized
+        return resized
+
+    @staticmethod
+    def _get_colorbar(width, height, colormap):
+        """Return a cached colorbar image for given size/colormap, including labels."""
+        key = (width, height, int(colormap))
+        cb = MiDaS.colorbar_cache.get(key)
+        if cb is None:
+            bar = np.linspace(0, 255, height).astype(np.uint8)[::-1].reshape(-1, 1)
+            bar_img = np.repeat(bar, width, axis=1)
+            bar_color = cv2.applyColorMap(bar_img, colormap)
+            bar_color = bar_color.copy()
+            label_positions = [(height-1, 0), ((height-1)//2, 128), (0, 255)]
+            for y, val in label_positions:
+                label = f"{val}"
+                cv2.putText(bar_color, label, (width+5, y+8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 1)
+            MiDaS.colorbar_cache[key] = bar_color
+            cb = bar_color
+        return cb.copy()
     @staticmethod
     def show_birds_eye_view(frame, car_boxes, window_name="BirdsEyeView", yolo_results=None, sensitivity_value=None):
         # --- Bird's Eye View Icon Logic (matches README) ---
@@ -63,17 +108,14 @@ class MiDaS:
         car_x = view_w // 2 - car_w // 2
         car_y = view_h - car_h - margin
         car_img_path = os.path.join(os.path.dirname(__file__), 'assets', 'birds_eye_view_car.png')
-        if os.path.exists(car_img_path):
-            car_img = cv2.imread(car_img_path, cv2.IMREAD_UNCHANGED)
-            if car_img is not None:
-                car_img = cv2.resize(car_img, (car_w, car_h))
+        car_img = MiDaS._get_resized_asset(car_img_path, (car_w, car_h))
+        if car_img is not None:
                 # If PNG with alpha, blend
                 if car_img.shape[2] == 4:
-                    alpha = car_img[:,:,3] / 255.0
-                    for c in range(3):
-                        view[car_y:car_y+car_h, car_x:car_x+car_w, c] = (
-                            alpha * car_img[:,:,c] + (1-alpha) * view[car_y:car_y+car_h, car_x:car_x+car_w, c]
-                        ).astype(np.uint8)
+                    alpha = (car_img[:,:,3] / 255.0)[:, :, None]
+                    region = view[car_y:car_y+car_h, car_x:car_x+car_w]
+                    blended = (alpha * car_img[:,:,:3] + (1 - alpha) * region).astype(np.uint8)
+                    region[:] = blended
                 else:
                     view[car_y:car_y+car_h, car_x:car_x+car_w] = car_img[:,:,:3]
         else:
@@ -92,19 +134,14 @@ class MiDaS:
         zone_green_types = [None, None, None]  # For awareness-only (green) icons
         # First, fill in red alert zones as before
         # (Red is checked/set first, so it always takes priority over green)
-        for box in car_boxes:
-            x1, y1, x2, y2, alert_type = box if len(box) == 5 else (*box, 'car')
-            box_cx = (x1 + x2) / 2
-            w = frame.shape[1]
-            if box_cx < w/3:
-                zone_colors[0] = (0,0,255)
-                zone_alert_types[0] = alert_type
-            elif box_cx < 2*w/3:
-                zone_colors[1] = (0,0,255)
-                zone_alert_types[1] = alert_type
-            else:
-                zone_colors[2] = (0,0,255)
-                zone_alert_types[2] = alert_type
+        if car_boxes:
+            arr_boxes = np.array([b[:5] if len(b) == 5 else (*b, 'car') for b in car_boxes], dtype=object)
+            centers = (arr_boxes[:,0].astype(float) + arr_boxes[:,2].astype(float)) / 2.0
+            w_frame = frame.shape[1]
+            zone_indices = np.where(centers < w_frame/3, 0, np.where(centers < 2*w_frame/3, 1, 2))
+            for (x1, y1, x2, y2, alert_type), z in zip(arr_boxes, zone_indices):
+                zone_colors[z] = (0,0,255)
+                zone_alert_types[z] = alert_type
         # Now, if yolo_results is provided, fill in green awareness icons for any detected object (no alert)
         # (Green is only set if there is no red alert in that zone)
         if yolo_results is not None and hasattr(yolo_results, 'boxes') and yolo_results.boxes is not None:
@@ -138,24 +175,12 @@ class MiDaS:
         green_car_img_path = os.path.join(os.path.dirname(__file__), 'assets', 'green_car.png')
         green_person_img_path = os.path.join(os.path.dirname(__file__), 'assets', 'green_person.png')
         green_bus_img_path = os.path.join(os.path.dirname(__file__), 'assets', 'green_bus.png')
-        red_car_img = None
-        red_person_img = None
-        red_bus_img = None
-        green_car_img = None
-        green_person_img = None
-        green_bus_img = None
-        if os.path.exists(red_car_img_path):
-            red_car_img = cv2.imread(red_car_img_path, cv2.IMREAD_UNCHANGED)
-        if os.path.exists(red_person_img_path):
-            red_person_img = cv2.imread(red_person_img_path, cv2.IMREAD_UNCHANGED)
-        if os.path.exists(red_bus_img_path):
-            red_bus_img = cv2.imread(red_bus_img_path, cv2.IMREAD_UNCHANGED)
-        if os.path.exists(green_car_img_path):
-            green_car_img = cv2.imread(green_car_img_path, cv2.IMREAD_UNCHANGED)
-        if os.path.exists(green_person_img_path):
-            green_person_img = cv2.imread(green_person_img_path, cv2.IMREAD_UNCHANGED)
-        if os.path.exists(green_bus_img_path):
-            green_bus_img = cv2.imread(green_bus_img_path, cv2.IMREAD_UNCHANGED)
+        red_car_img = MiDaS._get_resized_asset(red_car_img_path, (car_w, car_h))
+        red_person_img = MiDaS._get_resized_asset(red_person_img_path, (car_w, car_h))
+        red_bus_img = MiDaS._get_resized_asset(red_bus_img_path, (car_w, car_h))
+        green_car_img = MiDaS._get_resized_asset(green_car_img_path, (car_w, car_h))
+        green_person_img = MiDaS._get_resized_asset(green_person_img_path, (car_w, car_h))
+        green_bus_img = MiDaS._get_resized_asset(green_bus_img_path, (car_w, car_h))
         for i, ((x0, y0), (x1, y1)) in enumerate(zones):
             # Draw zone background
             cv2.rectangle(view, (x0, y0), (x1, y1), (220,220,220), -1)
@@ -178,25 +203,23 @@ class MiDaS:
                 elif alert_type == 'truck' and red_bus_img is not None:
                     img_to_use = red_bus_img
                 if img_to_use is not None:
-                    car_img_zone = cv2.resize(img_to_use, (car_w, car_h))
+                    car_img_zone = img_to_use
                     if car_img_zone.shape[2] == 4:
-                        alpha = car_img_zone[:,:,3] / 255.0
-                        for c in range(3):
-                            view[y_start:y_start+car_h, x_start:x_start+car_w, c] = (
-                                alpha * car_img_zone[:,:,c] + (1-alpha) * view[y_start:y_start+car_h, x_start:x_start+car_w, c]
-                            ).astype(np.uint8)
+                        alpha = (car_img_zone[:,:,3] / 255.0)[:, :, None]
+                        region = view[y_start:y_start+car_h, x_start:x_start+car_w]
+                        blended = (alpha * car_img_zone[:,:,:3] + (1 - alpha) * region).astype(np.uint8)
+                        region[:] = blended
                     else:
                         view[y_start:y_start+car_h, x_start:x_start+car_w] = car_img_zone[:,:,:3]
                     # Draw red border
                     cv2.rectangle(view, (x_start, y_start), (x_start+car_w, y_start+car_h), (0,0,255), 4)
-                elif os.path.exists(car_img_path) and car_img is not None:
-                    car_img_zone = cv2.resize(car_img, (car_w, car_h))
+                elif car_img is not None:
+                    car_img_zone = car_img
                     if car_img_zone.shape[2] == 4:
-                        alpha = car_img_zone[:,:,3] / 255.0
-                        for c in range(3):
-                            view[y_start:y_start+car_h, x_start:x_start+car_w, c] = (
-                                alpha * car_img_zone[:,:,c] + (1-alpha) * view[y_start:y_start+car_h, x_start:x_start+car_w, c]
-                            ).astype(np.uint8)
+                        alpha = (car_img_zone[:,:,3] / 255.0)[:, :, None]
+                        region = view[y_start:y_start+car_h, x_start:x_start+car_w]
+                        blended = (alpha * car_img_zone[:,:,:3] + (1 - alpha) * region).astype(np.uint8)
+                        region[:] = blended
                     else:
                         view[y_start:y_start+car_h, x_start:x_start+car_w] = car_img_zone[:,:,:3]
                     cv2.rectangle(view, (x_start, y_start), (x_start+car_w, y_start+car_h), (0,0,255), 4)
@@ -216,23 +239,21 @@ class MiDaS:
                 elif green_type == 'truck' and green_bus_img is not None:
                     img_to_use = green_bus_img
                 if img_to_use is not None:
-                    car_img_zone = cv2.resize(img_to_use, (car_w, car_h))
+                    car_img_zone = img_to_use
                     if car_img_zone.shape[2] == 4:
-                        alpha = car_img_zone[:,:,3] / 255.0
-                        for c in range(3):
-                            view[y_start:y_start+car_h, x_start:x_start+car_w, c] = (
-                                alpha * car_img_zone[:,:,c] + (1-alpha) * view[y_start:y_start+car_h, x_start:x_start+car_w, c]
-                            ).astype(np.uint8)
+                        alpha = (car_img_zone[:,:,3] / 255.0)[:, :, None]
+                        region = view[y_start:y_start+car_h, x_start:x_start+car_w]
+                        blended = (alpha * car_img_zone[:,:,:3] + (1 - alpha) * region).astype(np.uint8)
+                        region[:] = blended
                     else:
                         view[y_start:y_start+car_h, x_start:x_start+car_w] = car_img_zone[:,:,:3]
         # Draw car image again at the bottom (your car)
-        if os.path.exists(car_img_path) and 'car_img' in locals() and car_img is not None:
+        if car_img is not None:
             if car_img.shape[2] == 4:
-                alpha = car_img[:,:,3] / 255.0
-                for c in range(3):
-                    view[car_y:car_y+car_h, car_x:car_x+car_w, c] = (
-                        alpha * car_img[:,:,c] + (1-alpha) * view[car_y:car_y+car_h, car_x:car_x+car_w, c]
-                    ).astype(np.uint8)
+                alpha = (car_img[:,:,3] / 255.0)[:, :, None]
+                region = view[car_y:car_y+car_h, car_x:car_x+car_w]
+                blended = (alpha * car_img[:,:,:3] + (1 - alpha) * region).astype(np.uint8)
+                region[:] = blended
             else:
                 view[car_y:car_y+car_h, car_x:car_x+car_w] = car_img[:,:,:3]
         else:
@@ -301,26 +322,21 @@ class MiDaS:
 
     @staticmethod
     def normalize_depth(depth_map: np.ndarray):
-        """Normalizes and colorizes a depth map for visualization. Returns colorized map and min/max values."""
+        """Normalizes and colorizes a depth map for visualization. Returns colorized map and min/max values.
+        Uses epsilon and clipping for numerical stability to match vectorized checks."""
         depth_min, depth_max = depth_map.min(), depth_map.max()
-        normalized = (depth_map - depth_min) / (depth_max - depth_min)
-        normalized = (normalized * 255).astype(np.uint8)
-        colorized = cv2.applyColorMap(normalized, cv2.COLORMAP_INFERNO)
+        denom = depth_max - depth_min
+        # Add epsilon to avoid divide-by-zero if scene has near-constant depth
+        normalized = (depth_map - depth_min) / (denom + 1e-8)
+        normalized = np.clip(normalized, 0.0, 1.0)
+        normalized_u8 = (normalized * 255).astype(np.uint8)
+        colorized = cv2.applyColorMap(normalized_u8, cv2.COLORMAP_INFERNO)
         return colorized, depth_min, depth_max
 
     @staticmethod
     def draw_depth_colorbar(image, vmin, vmax, colormap=cv2.COLORMAP_INFERNO, width=30, height=200, margin=10, decimals=2):
         """Draws a vertical colorbar on the right side of the image showing the depth range."""
-        bar = np.linspace(0, 255, height).astype(np.uint8)[::-1].reshape(-1, 1)
-        bar_img = np.repeat(bar, width, axis=1)
-        bar_color = cv2.applyColorMap(bar_img, colormap)
-        # Add fixed 0-255 labels for the colormap
-        bar_color = bar_color.copy()
-        # Place 0 at bottom, 128 at middle, 255 at top
-        label_positions = [(height-1, 0), ((height-1)//2, 128), (0, 255)]
-        for y, val in label_positions:
-            label = f"{val}"
-            cv2.putText(bar_color, label, (width+5, y+8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 1)
+        bar_color = MiDaS._get_colorbar(width, height, colormap)
         # Place bar on right side of image
         h, w = image.shape[:2]
         overlay = image.copy()
@@ -431,6 +447,20 @@ class MiDaS:
 
             cutoff = max(0, min(255, cutoff))
 
+            # Precompute boolean close-range map and its integral image for O(1) region sums
+            close_map = (normalized_uint8 >= cutoff).astype(np.uint8)
+            # Faster integral via OpenCV (adds an extra row/col at start)
+            integral = cv2.integral(close_map, sdepth=cv2.CV_32S)
+
+            def region_sum(integral_img, x1, y1, x2, y2):
+                """Sum in inclusive rectangle using cv2.integral output (with offset)."""
+                # cv2.integral has shape (h+1, w+1); shift coordinates by +1
+                A = integral_img[y2+1, x2+1]
+                B = integral_img[y1, x2+1]
+                C = integral_img[y2+1, x1]
+                D = integral_img[y1, x1]
+                return A - B - C + D
+
             car_boxes_birdseye = []
             # Exclude objects completely below the yellow guide line (bonnet area)
             guide_y = int(frame.shape[0] * 0.95)
@@ -443,12 +473,11 @@ class MiDaS:
                 # Exclude if the entire box is below the yellow line
                 if y1 > guide_y:
                     continue
-                # Vectorized close-range check using normalized depth indices
-                region_norm = normalized_uint8[y1:y2, x1:x2]
-                if region_norm.size == 0:
+                # O(1) close-range pixel count via integral image (inclusive bounds)
+                if x2 <= x1 or y2 <= y1:
                     continue
-                match_count = np.count_nonzero(region_norm >= cutoff)
-                total_pixels = region_norm.size
+                match_count = region_sum(integral, x1, y1, x2-1, y2-1)
+                total_pixels = (x2 - x1) * (y2 - y1)
                 color_match_ratio = match_count / total_pixels
                 is_alert = color_match_ratio > 0.75
                 # Commented below to save memory
