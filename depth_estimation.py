@@ -28,6 +28,7 @@ import cv2
 import torch
 import numpy as np
 import warnings
+import time
 from ultralytics import YOLO
 warnings.filterwarnings("ignore", category=FutureWarning)
 
@@ -35,6 +36,59 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 # Lower values => more aggressive (objects further away may trigger). 58 is the
 # project-recommended default determined experimentally.
 BIRDSEYE_SENSITIVITY_DEFAULT = 58
+
+
+class LatestFrameReader:
+    """Continuously grabs frames in a background thread and exposes only the most recent.
+
+    This avoids processing a backlog when inference is slower than incoming frames.
+    If inference of one frame takes 1s, the next processed frame will be the *current*
+    frame at that moment, not buffered older frames.
+    """
+    def __init__(self, source):
+        self.cap = cv2.VideoCapture(source)
+        if not self.cap.isOpened():
+            raise ValueError(f"Cannot open video source: {source}")
+        # Try to shrink internal buffer if backend honors it
+        try:
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        except Exception:
+            pass
+        self.lock = threading.Lock()
+        self.latest_frame = None
+        self.running = True
+        self.reader_thread = threading.Thread(target=self._update, daemon=True)
+        self.reader_thread.start()
+
+    def _update(self):
+        while self.running:
+            ret, frame = self.cap.read()
+            if not ret:
+                # Source ended or error; stop loop
+                self.running = False
+                break
+            with self.lock:
+                self.latest_frame = frame
+            # No sleep: we want to overwrite as fast as frames arrive
+
+    def get_latest(self):
+        # Wait until at least one frame is available
+        if self.latest_frame is None and self.running:
+            # brief wait loop to avoid busy spin at startup
+            start = time.time()
+            while self.latest_frame is None and self.running and time.time() - start < 2:
+                time.sleep(0.005)
+        with self.lock:
+            frame = None if self.latest_frame is None else self.latest_frame.copy()
+        return frame
+
+    def release(self):
+        self.running = False
+        try:
+            self.reader_thread.join(timeout=1)
+        except Exception:
+            pass
+        self.cap.release()
 
 
 class MiDaS:
@@ -359,7 +413,7 @@ class MiDaS:
         combined = cv2.resize(combined, (width, height))
         return combined
 
-    def infer_video(self, source: str = 0, output_path: str = None, display_main: bool = True, display_birdseye: bool = True, sound_enabled: bool = True) -> None:
+    def infer_video(self, source: str = 0, output_path: str = None, display_main: bool = True, display_birdseye: bool = True, sound_enabled: bool = True, latest_only: bool = True) -> None:
         """Performs real-time depth estimation on a video stream.
 
         Args:
@@ -369,13 +423,17 @@ class MiDaS:
             display_birdseye: Show Bird's Eye proximity window (with sensitivity trackbar).
             sound_enabled: Enable audio alerts even if windows are hidden.
         """
-        cap = cv2.VideoCapture(source)
-        if not cap.isOpened():
-            raise ValueError(f"Cannot open video source: {source}")
-
         width = 1280
         height = 640
-        fps = cap.get(cv2.CAP_PROP_FPS) or 30
+
+        if latest_only:
+            reader = LatestFrameReader(source)
+            fps = reader.cap.get(cv2.CAP_PROP_FPS) or 30
+        else:
+            cap = cv2.VideoCapture(source)
+            if not cap.isOpened():
+                raise ValueError(f"Cannot open video source: {source}")
+            fps = cap.get(cv2.CAP_PROP_FPS) or 30
 
         writer = None
         if output_path:
@@ -399,9 +457,15 @@ class MiDaS:
                 pass
 
         while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
+            # Obtain the freshest frame (skip any backlog)
+            if latest_only:
+                frame = reader.get_latest()
+                if frame is None:
+                    break
+            else:
+                ret, frame = cap.read()
+                if not ret:
+                    break
 
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             input_batch = transform(rgb).to(self.device)
@@ -552,7 +616,10 @@ class MiDaS:
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
 
-        cap.release()
+        if latest_only:
+            reader.release()
+        else:
+            cap.release()
         if writer:
             writer.release()
         if display_main or display_birdseye:

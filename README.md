@@ -134,6 +134,8 @@ Do not run `depth_estimation.py` or `ldw.py` directly. Use `main.py` to control 
 - The system detects cars, pedestrians, buses, and trucks.
 - Bicycles and motorcycles are not included, as stationary bikes/motorcycles are not a collision risk and any person present (cyclist/motorcyclist) would already be detected as a pedestrian.
 - This system assumes a typical multi-lane road and does not restrict collision alerts to detected lanes. In single-lane or crowded town scenarios, more alerts may occur, which is expected due to closer objects. Lane-based alert restriction is not applied, as the multi-zone logic is designed for all types of roads.
+- Latest-frame capture clears buffer lag by processing on the current frame rather than the next frame which has since passed (due to lag), but not processing latency: objects that appear and disappear within a ~1s inference pass can be missed.
+
 
 
 **NEXT STEPS
