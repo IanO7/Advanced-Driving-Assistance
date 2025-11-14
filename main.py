@@ -26,6 +26,12 @@ SHOW_MAIN_WINDOW_DEFAULT = True             # Show combined LDW + depth window
 SHOW_BIRDSEYE_DEFAULT = True                # Show Bird's Eye proximity window
 ALERT_SOUND_ENABLED_DEFAULT = True          # Keep sound alerts (set False to mute)
 
+# Parallel processing (fast mode) defaults
+PARALLEL_MODE_DEFAULT = True                # Enable parallel detection + depth threads by default
+DETECTION_IMGSZ_DEFAULT = 256               # Resolution for YOLO in parallel mode (smaller = faster)
+DETECTION_INTERVAL_DEFAULT = 0.0            # Sleep between detection runs (0 = max speed)
+DEPTH_INTERVAL_DEFAULT = 0.0                # Sleep between depth runs (set >0 to cap depth FPS)
+
 
 def main():
     parser = argparse.ArgumentParser(description="Advanced Driving Assistance System")
@@ -36,6 +42,14 @@ def main():
     parser.add_argument('--camera', type=int, default=None, help='Camera index to use (e.g., 0 for default webcam). Overrides --video when provided.')
     parser.add_argument('--save', action='store_true', help='Save the visualized output to a video file (overrides default toggles).')
     parser.add_argument('--output', type=str, default=None, help='Output video file path. If not provided but --save is set, uses OUTPUT_PATH_DEFAULT from main.py.')
+    # Parallel processing toggles
+    parallel_group = parser.add_mutually_exclusive_group()
+    parallel_group.add_argument('--parallel', dest='parallel', action='store_true', help='Enable parallel detection + depth threads (lower latency).')
+    parallel_group.add_argument('--no-parallel', dest='parallel', action='store_false', help='Disable parallel threads; run sequentially.')
+    parser.set_defaults(parallel=PARALLEL_MODE_DEFAULT)
+    parser.add_argument('--detection-imgsz', type=int, default=DETECTION_IMGSZ_DEFAULT, help='Image size for YOLO in parallel mode (lower = faster).')
+    parser.add_argument('--detection-interval', type=float, default=DETECTION_INTERVAL_DEFAULT, help='Delay between detection cycles (seconds).')
+    parser.add_argument('--depth-interval', type=float, default=DEPTH_INTERVAL_DEFAULT, help='Delay between depth cycles (seconds).')
     args = parser.parse_args()
 
     # If no features are specified, use simple defaults
@@ -94,7 +108,12 @@ def main():
             output_path=output_path,
             display_main=SHOW_MAIN_WINDOW_DEFAULT,
             display_birdseye=SHOW_BIRDSEYE_DEFAULT,
-            sound_enabled=ALERT_SOUND_ENABLED_DEFAULT
+            sound_enabled=ALERT_SOUND_ENABLED_DEFAULT,
+            parallel_detection=args.parallel,
+            parallel_depth=args.parallel,
+            detection_imgsz=args.detection_imgsz,
+            detection_interval=args.detection_interval,
+            depth_interval=args.depth_interval
         )
     elif args.ldw:
         print("[INFO] Running only LDW overlay (example, not standalone)")

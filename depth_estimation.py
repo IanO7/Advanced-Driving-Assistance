@@ -91,6 +91,122 @@ class LatestFrameReader:
         self.cap.release()
 
 
+class DetectionWorker:
+    """Runs YOLO object detection on the freshest frame in a background thread.
+
+    Provides near-FPS detection independent of the (slower) depth pipeline.
+    The depth loop then fuses the latest detection results with current depth.
+    """
+    def __init__(self, yolo_model, frame_reader: LatestFrameReader, classes=None, imgsz=288, conf=0.35, interval=0.0):
+        self.model = yolo_model
+        self.frame_reader = frame_reader
+        self.classes = classes if classes is not None else [0, 2, 5, 7]
+        self.imgsz = imgsz
+        self.conf = conf
+        self.interval = max(0.0, interval)
+        self.lock = threading.Lock()
+        self.latest_results = None
+        self.latest_time = 0.0
+        self.running = True
+        self.thread = threading.Thread(target=self._loop, daemon=True)
+        self.thread.start()
+
+    def _loop(self):
+        while self.running:
+            frame = self.frame_reader.get_latest()
+            if frame is None:
+                time.sleep(0.005)
+                continue
+            try:
+                results = self.model(
+                    frame,
+                    classes=self.classes,
+                    imgsz=self.imgsz,
+                    conf=self.conf,
+                    verbose=False
+                )[0]
+            except Exception:
+                results = None
+            with self.lock:
+                self.latest_results = results
+                self.latest_time = time.time()
+            if self.interval > 0:
+                time.sleep(self.interval)
+
+    def get_latest(self):
+        with self.lock:
+            return self.latest_results
+
+    def stop(self):
+        self.running = False
+        try:
+            self.thread.join(timeout=1)
+        except Exception:
+            pass
+
+
+class DepthWorker:
+    """Asynchronous depth inference worker.
+
+    Continuously reads the freshest frame, runs MiDaS + normalization,
+    and publishes (depth_array, colored_depth, dmin, dmax, timestamp).
+    This decouples heavy depth estimation from the main loop so detection
+    alerts can stay low-latency.
+    """
+    def __init__(self, midas_model, transform_fn, frame_reader: LatestFrameReader, interval: float = 0.0, device=None):
+        self.midas = midas_model
+        self.transform_fn = transform_fn
+        self.frame_reader = frame_reader
+        self.interval = max(0.0, interval)
+        self.device = device
+        self.lock = threading.Lock()
+        self.latest_depth = None  # (depth_array, colored_depth, dmin, dmax, ts)
+        self.running = True
+        self.thread = threading.Thread(target=self._loop, daemon=True)
+        self.thread.start()
+
+    def _loop(self):
+        while self.running:
+            frame = self.frame_reader.get_latest()
+            if frame is None:
+                time.sleep(0.01)
+                continue
+            try:
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                batch = self.transform_fn(rgb).to(self.device)
+                with torch.no_grad():
+                    prediction = self.midas(batch)
+                    prediction = torch.nn.functional.interpolate(
+                        prediction.unsqueeze(1),
+                        size=rgb.shape[:2],
+                        mode="bicubic",
+                        align_corners=False,
+                    ).squeeze()
+                depth_map = prediction.cpu().numpy()
+                depth_min, depth_max = depth_map.min(), depth_map.max()
+                norm = (depth_map - depth_min) / (depth_max - depth_min + 1e-8)
+                norm = np.clip(norm, 0.0, 1.0)
+                colored = cv2.applyColorMap((norm * 255).astype(np.uint8), cv2.COLORMAP_INFERNO)
+                with self.lock:
+                    self.latest_depth = (depth_map, colored, depth_min, depth_max, time.time())
+            except Exception:
+                # Keep previous depth if error
+                pass
+            if self.interval > 0:
+                time.sleep(self.interval)
+
+    def get_latest(self):
+        with self.lock:
+            return self.latest_depth
+
+    def stop(self):
+        self.running = False
+        try:
+            self.thread.join(timeout=1)
+        except Exception:
+            pass
+
+
 class MiDaS:
     # Simple caches to avoid per-frame IO and rendering
     assets_cache = {}
@@ -413,7 +529,7 @@ class MiDaS:
         combined = cv2.resize(combined, (width, height))
         return combined
 
-    def infer_video(self, source: str = 0, output_path: str = None, display_main: bool = True, display_birdseye: bool = True, sound_enabled: bool = True, latest_only: bool = True) -> None:
+    def infer_video(self, source: str = 0, output_path: str = None, display_main: bool = True, display_birdseye: bool = True, sound_enabled: bool = True, latest_only: bool = True, parallel_detection: bool = True, detection_interval: float = 0.0, detection_imgsz: int = 256, parallel_depth: bool = True, depth_interval: float = 0.0) -> None:
         """Performs real-time depth estimation on a video stream.
 
         Args:
@@ -442,9 +558,31 @@ class MiDaS:
 
         transform = self.transforms()
 
-        # Load YOLO model for object detection
+        # Load YOLO model for object detection (enable half precision if GPU)
         yolo_model = YOLO("yolo11n.pt")
+        if self.device.type == 'cuda':
+            try:
+                yolo_model.to(self.device)
+                yolo_model.model.half()
+            except Exception:
+                pass
         class_names = yolo_model.model.names if hasattr(yolo_model.model, 'names') else [str(i) for i in range(100)]
+        if parallel_detection and latest_only:
+            detection_worker = DetectionWorker(
+                yolo_model,
+                reader,
+                classes=[0, 2, 5, 7],
+                imgsz=detection_imgsz,
+                conf=0.35,
+                interval=detection_interval
+            )
+        else:
+            detection_worker = None
+
+        if parallel_depth and latest_only:
+            depth_worker = DepthWorker(self.midas, transform, reader, interval=depth_interval, device=self.device)
+        else:
+            depth_worker = None
 
         print("🚀 Starting video depth inference... Press 'q' to quit.")
         # If we're displaying UI, create the BirdsEyeView window and a sensitivity
@@ -467,33 +605,52 @@ class MiDaS:
                 if not ret:
                     break
 
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            input_batch = transform(rgb).to(self.device)
-
-            depth = self.depth_map(input_batch, rgb)
-            colored_depth, dmin, dmax = self.normalize_depth(depth)
-            # We'll draw boxes on a copy so the colorbar is always on top
-            colored_depth_with_boxes = colored_depth.copy()
-            # Compute normalized 0-255 depth indices once (vectorized)
-            norm = (depth - dmin) / (dmax - dmin + 1e-8)
-            normalized_uint8 = (np.clip(norm, 0.0, 1.0) * 255).astype(np.uint8)
+            # Acquire latest depth (async) or compute synchronously if disabled
+            if depth_worker is not None:
+                depth_payload = depth_worker.get_latest()
+                if depth_payload is None:
+                    depth = None
+                    colored_depth_with_boxes = np.zeros_like(frame)
+                    dmin = dmax = 0.0
+                    normalized_uint8 = None
+                else:
+                    depth, colored_depth, dmin, dmax, _ts = depth_payload
+                    colored_depth_with_boxes = colored_depth.copy()
+                    norm = (depth - dmin) / (dmax - dmin + 1e-8)
+                    normalized_uint8 = (np.clip(norm, 0.0, 1.0) * 255).astype(np.uint8)
+            else:
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                input_batch = transform(rgb).to(self.device)
+                depth = self.depth_map(input_batch, rgb)
+                colored_depth, dmin, dmax = self.normalize_depth(depth)
+                colored_depth_with_boxes = colored_depth.copy()
+                norm = (depth - dmin) / (dmax - dmin + 1e-8)
+                normalized_uint8 = (np.clip(norm, 0.0, 1.0) * 255).astype(np.uint8)
 
 
             # --- Object Detection and Alert Logic ---
-            # Restrict to key classes for speed and clarity; reduce input size; suppress logs
-            results = yolo_model(
-                frame,
-                classes=[0, 2, 5, 7],  # person, car, bus, truck
-                imgsz=288,
-                conf=0.35,
-                verbose=False
-            )[0]
-            if results.boxes is not None:
-                all_class_ids = results.boxes.cls.cpu().numpy().astype(int)
-                boxes_all = results.boxes.xyxy.cpu().numpy()
+            if parallel_detection and detection_worker is not None:
+                results = detection_worker.get_latest()
+                if results is not None and results.boxes is not None:
+                    all_class_ids = results.boxes.cls.cpu().numpy().astype(int)
+                    boxes_all = results.boxes.xyxy.cpu().numpy()
+                else:
+                    all_class_ids = []
+                    boxes_all = np.empty((0, 4))
             else:
-                all_class_ids = []
-                boxes_all = np.empty((0, 4))
+                results = yolo_model(
+                    frame,
+                    classes=[0, 2, 5, 7],  # person, car, bus, truck
+                    imgsz=288,
+                    conf=0.35,
+                    verbose=False
+                )[0]
+                if results.boxes is not None:
+                    all_class_ids = results.boxes.cls.cpu().numpy().astype(int)
+                    boxes_all = results.boxes.xyxy.cpu().numpy()
+                else:
+                    all_class_ids = []
+                    boxes_all = np.empty((0, 4))
 
             alert_triggered = False
             alert_texts = set()
@@ -511,10 +668,13 @@ class MiDaS:
 
             cutoff = max(0, min(255, cutoff))
 
-            # Precompute boolean close-range map and its integral image for O(1) region sums
-            close_map = (normalized_uint8 >= cutoff).astype(np.uint8)
-            # Faster integral via OpenCV (adds an extra row/col at start)
-            integral = cv2.integral(close_map, sdepth=cv2.CV_32S)
+            # Precompute depth proximity only if depth exists
+            if normalized_uint8 is not None:
+                close_map = (normalized_uint8 >= cutoff).astype(np.uint8)
+                integral = cv2.integral(close_map, sdepth=cv2.CV_32S)
+            else:
+                close_map = None
+                integral = None
 
             def region_sum(integral_img, x1, y1, x2, y2):
                 """Sum in inclusive rectangle using cv2.integral output (with offset)."""
@@ -540,10 +700,13 @@ class MiDaS:
                 # O(1) close-range pixel count via integral image (inclusive bounds)
                 if x2 <= x1 or y2 <= y1:
                     continue
-                match_count = region_sum(integral, x1, y1, x2-1, y2-1)
-                total_pixels = (x2 - x1) * (y2 - y1)
-                color_match_ratio = match_count / total_pixels
-                is_alert = color_match_ratio > 0.75
+                if integral is not None:
+                    match_count = region_sum(integral, x1, y1, x2-1, y2-1)
+                    total_pixels = (x2 - x1) * (y2 - y1)
+                    color_match_ratio = match_count / total_pixels
+                    is_alert = color_match_ratio > 0.75
+                else:
+                    is_alert = False  # Depth not ready yet; only awareness
                 # Commented below to save memory
                 # print(f"Object: {class_names[cls_id] if cls_id < len(class_names) else str(cls_id)}, match: {match_count}, total: {total_pixels}, color_match_ratio: {color_match_ratio:.2f}, alert: {is_alert}")
                 if is_alert:
@@ -590,7 +753,8 @@ class MiDaS:
                         cv2.putText(frame, text, (30, 60 + i * 60), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 4)
 
             # Add colorbar after drawing boxes so it is always on top
-            colored_depth_with_boxes = self.draw_depth_colorbar(colored_depth_with_boxes, dmin, dmax)
+            if depth is not None:
+                colored_depth_with_boxes = self.draw_depth_colorbar(colored_depth_with_boxes, dmin, dmax)
 
 
             # Lane Departure Warning overlay (left side)
@@ -620,6 +784,10 @@ class MiDaS:
             reader.release()
         else:
             cap.release()
+        if detection_worker is not None:
+            detection_worker.stop()
+        if depth_worker is not None:
+            depth_worker.stop()
         if writer:
             writer.release()
         if display_main or display_birdseye:

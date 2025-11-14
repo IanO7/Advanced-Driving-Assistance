@@ -136,6 +136,23 @@ Do not run `depth_estimation.py` or `ldw.py` directly. Use `main.py` to control 
 - This system assumes a typical multi-lane road and does not restrict collision alerts to detected lanes. In single-lane or crowded town scenarios, more alerts may occur, which is expected due to closer objects. Lane-based alert restriction is not applied, as the multi-zone logic is designed for all types of roads.
 - Latest-frame capture clears buffer lag by processing on the current frame rather than the next frame which has since passed (due to lag), but not processing latency: objects that appear and disappear within a ~1s inference pass can be missed.
 
+### Parallel Processing Mode (Fast Path)
+This mode reduces perceived alert latency without changing the collision algorithm.
+**What Changed:**
+- Separate threads for detection (`DetectionWorker`) and depth (`DepthWorker`).
+- Always use freshest frame (no backlog) via `LatestFrameReader`.
+- Optional smaller YOLO input size (default 256) for higher FPS.
+- Tunable intervals (`--detection-interval`, `--depth-interval`) to cap thread frequency.
+**What Did NOT Change:**
+- 2-stage logic (presence → depth risk) and red-over-green priority.
+- 75% close-pixel ratio check for alert promotion.
+- Inferno colormap cutoff semantics and sensitivity trackbar default (58).
+- Depth normalization and bounding box proximity evaluation method.
+**Trade-offs:**
+- Slight variation in box tightness with reduced `--detection-imgsz`.
+- Very fast moving objects may have minor temporal mismatch between detection and depth frames (usually reduces false positives).
+**Disable / Reproduce Legacy:** run with `--no-parallel --detection-imgsz 288`.
+
 
 
 **NEXT STEPS
