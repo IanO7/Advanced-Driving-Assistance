@@ -38,6 +38,7 @@ This project implements a real-time advanced driving assistance system (ADAS) th
 - Alerts are overlaid on the video feed for immediate feedback.
 - A horizontal yellow guide line is drawn 10% from the bottom of the live display to help you align the vehicle's bonnet (hood) just below it. This improves real-world depth estimation. The line is only visible in the live display, not in saved videos, and is not part of the actual video (just output).
 - In the BirdsEyeView window, a "Sensitivity" slider lets you adjust how close an object must be to trigger a red alert icon. Lower values are more sensitive (alert for further objects), higher values require objects to be closer. The default is 58 (recommended), and the UI shows "(recommended)" if set to this value. Adjust live as needed.
+- Alerts use Left / Center / Right: three equal-width forward sectors (not lane-based) indicating where an object lies.
 
 **Note:** Any detected object whose bounding box is completely below this yellow line (i.e., in the bonnet area) is excluded from all alert and awareness logic. Only objects at least partially above or touching the line are considered for alerts or icons.
 
