@@ -401,7 +401,7 @@ class MiDaS:
             results = yolo_model(
                 frame,
                 classes=[0, 2, 5, 7],  # person, car, bus, truck
-                imgsz=480,
+                imgsz=288,
                 conf=0.35,
                 verbose=False
             )[0]
