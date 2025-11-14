@@ -104,6 +104,7 @@ If you just press Run (F5) in VS Code or run `python main.py` with no arguments,
 - `CAMERA_INDEX_DEFAULT`: which webcam index to use (usually `0`)
 - `VIDEO_PATH_DEFAULT`: default MP4 path (e.g., `test_videos/california_drive.mp4`)
 - `ENABLE_DEPTH_DEFAULT` / `ENABLE_LDW_DEFAULT`: which features are enabled when no flags are passed
+ - `USE_IP_STREAM_DEFAULT` / `IP_STREAM_URL_DEFAULT`: enable and set these to auto-use a live phone/IP stream without CLI flags
 
 ### Display & Alert Toggles
 Also in `main.py` you can quickly enable/disable UI surfaces without CLI flags:
@@ -122,6 +123,14 @@ python main.py --video "test_videos/california_drive.mp4" --output output.mp4
 - Run with webcam (index 0):
 ```powershell
 python main.py --camera 0 --output output.mp4
+```
+IP / phone stream (explicit command):
+```powershell
+& C:/Users/Admin/.conda/envs/adas_project/python.exe C:/Users/Admin/Desktop/Advanced-Driving-Assistance/main.py --depth --video "http://10.211.119.11:8080/video"
+```
+IP / phone stream (toggle only): set `USE_IP_STREAM_DEFAULT = True`, then:
+```powershell
+python main.py
 ```
 
 Tip: `--video 0` is also treated as webcam index `0`.

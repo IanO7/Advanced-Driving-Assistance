@@ -12,6 +12,8 @@ from ldw import ldw_overlay
 USE_CAMERA_DEFAULT = False           # True: use webcam by default, False: use video file by default
 CAMERA_INDEX_DEFAULT = 0             # Which camera index to use when USE_CAMERA_DEFAULT is True
 VIDEO_PATH_DEFAULT = "test_videos/pedestrian_crash.mp4"  # Default video when USE_CAMERA_DEFAULT is False
+USE_IP_STREAM_DEFAULT = True        # True: use an IP / network stream by default when no CLI source provided
+IP_STREAM_URL_DEFAULT = "http://10.211.119.11:8080/video"  # Default IP stream URL if enabled
 
 # Feature defaults when no --depth/--ldw flags are provided
 ENABLE_DEPTH_DEFAULT = True
@@ -32,7 +34,9 @@ DETECTION_IMGSZ_DEFAULT = 256               # Resolution for YOLO in parallel mo
 DETECTION_INTERVAL_DEFAULT = 0.0            # Sleep between detection runs (0 = max speed)
 DEPTH_INTERVAL_DEFAULT = 0.0                # Sleep between depth runs (set >0 to cap depth FPS)
 
-
+# ================================
+# Main Controller Below
+# ================================
 def main():
     parser = argparse.ArgumentParser(description="Advanced Driving Assistance System")
     parser.add_argument('--depth', action='store_true', help='Enable depth estimation')
@@ -77,8 +81,11 @@ def main():
             else:
                 print(f"[INFO] Using video file '{source}' (from --video).")
         else:
-            # Fall back to simple toggles for no-arg Run button usage
-            if USE_CAMERA_DEFAULT:
+            # Fall back to simple toggles for no-arg Run button usage (precedence: IP stream > camera > file)
+            if USE_IP_STREAM_DEFAULT:
+                source = IP_STREAM_URL_DEFAULT
+                print(f"[INFO] No input args provided. Using default IP stream '{source}'.")
+            elif USE_CAMERA_DEFAULT:
                 source = int(CAMERA_INDEX_DEFAULT)
                 print(f"[INFO] No input args provided. Using default camera index {source} (from toggles).")
             else:
