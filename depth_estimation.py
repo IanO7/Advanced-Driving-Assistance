@@ -394,6 +394,9 @@ class MiDaS:
             colored_depth, dmin, dmax = self.normalize_depth(depth)
             # We'll draw boxes on a copy so the colorbar is always on top
             colored_depth_with_boxes = colored_depth.copy()
+            # Compute normalized 0-255 depth indices once (vectorized)
+            norm = (depth - dmin) / (dmax - dmin + 1e-8)
+            normalized_uint8 = (np.clip(norm, 0.0, 1.0) * 255).astype(np.uint8)
 
 
             # --- Object Detection and Alert Logic ---
@@ -427,10 +430,6 @@ class MiDaS:
                 cutoff = BIRDSEYE_SENSITIVITY_DEFAULT
 
             cutoff = max(0, min(255, cutoff))
-            allowed_bgr_set = set(
-                tuple(map(int, np.array(bgr).flatten()))
-                for bgr in cv2.applyColorMap(np.arange(0, 256, dtype=np.uint8), cv2.COLORMAP_INFERNO)[cutoff:256]
-            )
 
             car_boxes_birdseye = []
             # Exclude objects completely below the yellow guide line (bonnet area)
@@ -444,13 +443,13 @@ class MiDaS:
                 # Exclude if the entire box is below the yellow line
                 if y1 > guide_y:
                     continue
-                color_region = colored_depth[y1:y2, x1:x2]
-                if color_region.size == 0:
+                # Vectorized close-range check using normalized depth indices
+                region_norm = normalized_uint8[y1:y2, x1:x2]
+                if region_norm.size == 0:
                     continue
-                color_region_flat = color_region.reshape(-1, 3)
-                match_count = sum(tuple(pixel) in allowed_bgr_set for pixel in color_region_flat)
-                total_pixels = color_region_flat.shape[0]
-                color_match_ratio = match_count / total_pixels if total_pixels > 0 else 0
+                match_count = np.count_nonzero(region_norm >= cutoff)
+                total_pixels = region_norm.size
+                color_match_ratio = match_count / total_pixels
                 is_alert = color_match_ratio > 0.75
                 # Commented below to save memory
                 # print(f"Object: {class_names[cls_id] if cls_id < len(class_names) else str(cls_id)}, match: {match_count}, total: {total_pixels}, color_match_ratio: {color_match_ratio:.2f}, alert: {is_alert}")
