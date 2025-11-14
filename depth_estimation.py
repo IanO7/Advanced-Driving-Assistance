@@ -533,8 +533,16 @@ class MiDaS:
         combined = cv2.resize(combined, (width, height))
         return combined
 
-    def infer_video(self, source: str = 0, output_path: str = None, display: bool = True) -> None:
-        """Performs real-time depth estimation on a video stream."""
+    def infer_video(self, source: str = 0, output_path: str = None, display_main: bool = True, display_birdseye: bool = True, sound_enabled: bool = True) -> None:
+        """Performs real-time depth estimation on a video stream.
+
+        Args:
+            source: Camera index or video file path.
+            output_path: Optional path to save combined output video.
+            display_main: Show the combined LDW + depth window.
+            display_birdseye: Show Bird's Eye proximity window (with sensitivity trackbar).
+            sound_enabled: Enable audio alerts even if windows are hidden.
+        """
         cap = cv2.VideoCapture(source)
         if not cap.isOpened():
             raise ValueError(f"Cannot open video source: {source}")
@@ -557,13 +565,11 @@ class MiDaS:
         print("🚀 Starting video depth inference... Press 'q' to quit.")
         # If we're displaying UI, create the BirdsEyeView window and a sensitivity
         # trackbar so the user can tune the Inferno colormap cutoff (0-255).
-        if display:
+        if display_birdseye:
             try:
                 cv2.namedWindow("BirdsEyeView", cv2.WINDOW_NORMAL)
-                # trackbar value is the lower bound index into the Inferno colormap
                 cv2.createTrackbar('Sensitivity', 'BirdsEyeView', BIRDSEYE_SENSITIVITY_DEFAULT, 255, lambda x: None)
             except Exception:
-                # If window creation fails for any reason (headless env), fall back silently
                 pass
 
         while True:
@@ -602,7 +608,7 @@ class MiDaS:
             # Read sensitivity cutoff from the trackbar (if available) and compute
             # the allowed BGR set for alerting. The cutoff is the lower colormap
             # index considered 'close' (higher index = closer in Inferno mapping).
-            if display:
+            if display_birdseye:
                 try:
                     cutoff = int(cv2.getTrackbarPos('Sensitivity', 'BirdsEyeView'))
                 except Exception:
@@ -680,10 +686,11 @@ class MiDaS:
                 cv2.rectangle(colored_depth_with_boxes, (x1, y1), (x2, y2), color, 2)
                 cv2.putText(colored_depth_with_boxes, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
 
-            if alert_triggered:
+            if alert_triggered and sound_enabled:
                 threading.Thread(target=play_alert_once, daemon=True).start()
                 for i, text in enumerate(sorted(alert_texts)):
-                    cv2.putText(frame, text, (30, 60 + i * 60), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 4)
+                    if display_main:
+                        cv2.putText(frame, text, (30, 60 + i * 60), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 4)
 
             # Add colorbar after drawing boxes so it is always on top
             colored_depth_with_boxes = self.draw_depth_colorbar(colored_depth_with_boxes, dmin, dmax)
@@ -701,9 +708,9 @@ class MiDaS:
             # Concatenate LDW overlay (left) and depth map (right)
             combined = np.hstack((ldw_frame_resized, depth_resized))
 
-            if display:
+            if display_main:
                 cv2.imshow("MiDaS Depth Estimation (Press 'q' to exit)", combined)
-                # Show bird's eye view window (pass yolo results for awareness icons and sensitivity value)
+            if display_birdseye:
                 self.show_birds_eye_view(frame, car_boxes_birdseye, yolo_results=results, sensitivity_value=cutoff)
 
             if writer:
@@ -715,7 +722,8 @@ class MiDaS:
         cap.release()
         if writer:
             writer.release()
-        cv2.destroyAllWindows()
+        if display_main or display_birdseye:
+            cv2.destroyAllWindows()
         print("✅ Inference completed and resources released.")
 
 

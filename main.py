@@ -11,7 +11,7 @@ from ldw import ldw_overlay
 # ================================
 USE_CAMERA_DEFAULT = False           # True: use webcam by default, False: use video file by default
 CAMERA_INDEX_DEFAULT = 0             # Which camera index to use when USE_CAMERA_DEFAULT is True
-VIDEO_PATH_DEFAULT = "test_videos/california_drive.mp4"  # Default video when USE_CAMERA_DEFAULT is False
+VIDEO_PATH_DEFAULT = "test_videos/pedestrian_crash.mp4"  # Default video when USE_CAMERA_DEFAULT is False
 
 # Feature defaults when no --depth/--ldw flags are provided
 ENABLE_DEPTH_DEFAULT = True
@@ -20,6 +20,11 @@ ENABLE_LDW_DEFAULT = True
 # Output saving controls (for Run button / no-arg runs)
 SAVE_OUTPUT_DEFAULT = False                 # True to save by default, False to not save by default
 OUTPUT_PATH_DEFAULT = "output.mp4"         # Default filename when saving is enabled without --output
+
+# Display toggles (set here for quick on/off without CLI flags)
+SHOW_MAIN_WINDOW_DEFAULT = True             # Show combined LDW + depth window
+SHOW_BIRDSEYE_DEFAULT = True                # Show Bird's Eye proximity window
+ALERT_SOUND_ENABLED_DEFAULT = True          # Keep sound alerts (set False to mute)
 
 
 def main():
@@ -84,7 +89,13 @@ def main():
                 print("[INFO] Not saving output (from default toggle).")
 
         # You can add logic to pass args.ldw to MiDaS or handle overlays here
-        midas.infer_video(source=source, output_path=output_path, display=True)
+        midas.infer_video(
+            source=source,
+            output_path=output_path,
+            display_main=SHOW_MAIN_WINDOW_DEFAULT,
+            display_birdseye=SHOW_BIRDSEYE_DEFAULT,
+            sound_enabled=ALERT_SOUND_ENABLED_DEFAULT
+        )
     elif args.ldw:
         print("[INFO] Running only LDW overlay (example, not standalone)")
         # You would need to implement a video loop here if you want LDW only

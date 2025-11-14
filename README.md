@@ -105,6 +105,12 @@ If you just press Run (F5) in VS Code or run `python main.py` with no arguments,
 - `VIDEO_PATH_DEFAULT`: default MP4 path (e.g., `test_videos/california_drive.mp4`)
 - `ENABLE_DEPTH_DEFAULT` / `ENABLE_LDW_DEFAULT`: which features are enabled when no flags are passed
 
+### Display & Alert Toggles
+Also in `main.py` you can quickly enable/disable UI surfaces without CLI flags:
+- `SHOW_MAIN_WINDOW_DEFAULT`: show/hide combined Lane + Depth window.
+- `SHOW_BIRDSEYE_DEFAULT`: show/hide Bird's Eye proximity/sensitivity window.
+- `ALERT_SOUND_ENABLED_DEFAULT`: keep audio alerts even if all windows are hidden.
+
 CLI flags always override these toggles.
 
 ### Command-line options (override toggles)
