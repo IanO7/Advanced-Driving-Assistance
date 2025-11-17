@@ -98,6 +98,10 @@ Use the main controller to run and configure features:
 python main.py
 ```
 
+### Calibration
+- Click "Calibrate" in BirdsEyeView or press `c` to auto-set the Sensitivity slider using the nearest detected object (25th percentile of its ROI).
+- Use the slider to fine-tune aggressiveness; 58 is the recommended default.
+
 ### Simple toggles (no-args Run button)
 If you just press Run (F5) in VS Code or run `python main.py` with no arguments, the defaults are controlled at the top of `main.py`:
 - `USE_CAMERA_DEFAULT`: set `True` to default to webcam, `False` to default to a video file

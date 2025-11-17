@@ -44,6 +44,8 @@ class LatestFrameReader:
     This avoids processing a backlog when inference is slower than incoming frames.
     If inference of one frame takes 1s, the next processed frame will be the *current*
     frame at that moment, not buffered older frames.
+    Note: Intended for live streams/cameras. Video files are read sequentially
+    in infer_video() to avoid EOF freeze and ensure deterministic playback.
     """
     def __init__(self, source):
         self.cap = cv2.VideoCapture(source)
@@ -66,6 +68,9 @@ class LatestFrameReader:
             if not ret:
                 # Source ended or error; stop loop
                 self.running = False
+                # Ensure get_latest() returns None so callers can exit cleanly
+                with self.lock:
+                    self.latest_frame = None
                 break
             with self.lock:
                 self.latest_frame = frame
@@ -212,6 +217,11 @@ class MiDaS:
     assets_cache = {}
     colorbar_cache = {}
     resized_assets_cache = {}
+    # UI state for BirdsEyeView button
+    ui_calib_button_rect = None  # (x0, y0, x1, y1)
+    ui_calib_request = False     # set True by mouse callback; handled in main loop
+    ui_toast_text = None         # short status message rendered in BirdsEyeView
+    ui_toast_expire = 0.0        # epoch seconds when toast disappears
 
     @staticmethod
     def _load_asset(path):
@@ -254,6 +264,16 @@ class MiDaS:
             cb = bar_color
         return cb.copy()
     @staticmethod
+    def _on_birdseye_click(event, x, y, flags, param):
+        """OpenCV mouse callback: set a flag when the Calibrate button is clicked."""
+        if MiDaS.ui_calib_button_rect is None:
+            return
+        x0, y0, x1, y1 = MiDaS.ui_calib_button_rect
+        in_button = (x0 <= x <= x1 and y0 <= y <= y1)
+        # Trigger on both press and release to be forgiving
+        if in_button and (event == cv2.EVENT_LBUTTONDOWN or event == cv2.EVENT_LBUTTONUP):
+            MiDaS.ui_calib_request = True
+    @staticmethod
     def show_birds_eye_view(frame, car_boxes, window_name="BirdsEyeView", yolo_results=None, sensitivity_value=None):
         # --- Bird's Eye View Icon Logic (matches README) ---
         # For each detected object, the system follows a two-stage logic:
@@ -272,8 +292,16 @@ class MiDaS:
         car_w, car_h = 60, 100
         zone_h = 120
         margin = 20
-        # Create blank white image
+        # Create blank white image (Bird's Eye panel)
         view = np.ones((view_h, view_w, 3), dtype=np.uint8) * 255
+        # Draw a simple UI button for calibration in the top-right
+        btn_w, btn_h = 110, 36
+        btn_x = view_w - margin - btn_w
+        btn_y = margin
+        MiDaS.ui_calib_button_rect = (btn_x, btn_y, btn_x + btn_w, btn_y + btn_h)
+        cv2.rectangle(view, (btn_x, btn_y), (btn_x + btn_w, btn_y + btn_h), (50, 50, 50), -1)
+        cv2.rectangle(view, (btn_x, btn_y), (btn_x + btn_w, btn_y + btn_h), (0, 0, 0), 2)
+        cv2.putText(view, "Calibrate", (btn_x + 10, btn_y + 24), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2, cv2.LINE_AA)
         # Draw car image in the center bottom
         car_x = view_w // 2 - car_w // 2
         car_y = view_h - car_h - margin
@@ -434,6 +462,11 @@ class MiDaS:
             if sensitivity_value == BIRDSEYE_SENSITIVITY_DEFAULT:
                 text += " (recommended)"
             cv2.putText(view, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,0), 2, cv2.LINE_AA)
+        # Optional toast: transient on-screen message (e.g., calibration results)
+        now = time.time()
+        if MiDaS.ui_toast_text and now < MiDaS.ui_toast_expire:
+            cv2.rectangle(view, (10, 10), (10 + 200, 10 + 30), (0, 0, 0), -1)
+            cv2.putText(view, MiDaS.ui_toast_text, (18, 32), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2, cv2.LINE_AA)
         cv2.imshow(window_name, view)
     """Performs monocular depth estimation using Intel Labs MiDaS models.
 
@@ -542,7 +575,28 @@ class MiDaS:
         width = 1280
         height = 640
 
-        if latest_only:
+        # Decide whether the source is a file or a stream/camera.
+        # Rationale:
+        # - Streams/cameras benefit from a LatestFrameReader to skip backlog and reduce latency.
+        # - Files must be read sequentially (cv2.VideoCapture.read()) to avoid freezing at EOF
+        #   and to ensure deterministic frame-by-frame processing.
+        is_stream = False
+        if isinstance(source, (int, float)):
+            is_stream = True
+        elif isinstance(source, str):
+            if source.isdigit():
+                is_stream = True
+            else:
+                low = source.lower()
+                if low.startswith("rtsp://") or low.startswith("http://") or low.startswith("https://"):
+                    is_stream = True
+                else:
+                    is_stream = False  # treat as file path
+
+        # Use latest-only reader only for streams; files are read sequentially to avoid EOF freeze
+        use_reader = latest_only and is_stream
+
+        if use_reader:
             reader = LatestFrameReader(source)
             fps = reader.cap.get(cv2.CAP_PROP_FPS) or 30
         else:
@@ -567,7 +621,9 @@ class MiDaS:
             except Exception:
                 pass
         class_names = yolo_model.model.names if hasattr(yolo_model.model, 'names') else [str(i) for i in range(100)]
-        if parallel_detection and latest_only:
+        # Background detection worker is enabled only when using the reader (i.e., streams),
+        # to avoid mixing async results with sequential file decoding.
+        if parallel_detection and use_reader:
             detection_worker = DetectionWorker(
                 yolo_model,
                 reader,
@@ -579,7 +635,8 @@ class MiDaS:
         else:
             detection_worker = None
 
-        if parallel_depth and latest_only:
+        # Background depth worker follows the same rule as detection.
+        if parallel_depth and use_reader:
             depth_worker = DepthWorker(self.midas, transform, reader, interval=depth_interval, device=self.device)
         else:
             depth_worker = None
@@ -591,13 +648,15 @@ class MiDaS:
             try:
                 cv2.namedWindow("BirdsEyeView", cv2.WINDOW_NORMAL)
                 cv2.createTrackbar('Sensitivity', 'BirdsEyeView', BIRDSEYE_SENSITIVITY_DEFAULT, 255, lambda x: None)
+                cv2.setMouseCallback("BirdsEyeView", MiDaS._on_birdseye_click)
             except Exception:
                 pass
 
         while True:
             # Obtain the freshest frame (skip any backlog)
-            if latest_only:
+            if use_reader:
                 frame = reader.get_latest()
+                # If the reader hit EOF or error, it sets latest_frame to None; exit
                 if frame is None:
                     break
             else:
@@ -777,10 +836,72 @@ class MiDaS:
             if writer:
                 writer.write(combined)
 
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                break
+            # Helper: run calibration (used by key 'c' and the BirdsEyeView button).
+            # It picks the nearest detected object (highest median proximity),
+            # then sets the Sensitivity trackbar to the 25th percentile of that ROI so ~75% of
+            # its pixels count as "close" in the Inferno colormap.
+            def _run_calibration():
+                try:
+                    if normalized_uint8 is None or len(boxes_all) == 0:
+                        print("[CAL] No depth or detections available for calibration.")
+                        MiDaS.ui_toast_text = "No data yet"
+                        MiDaS.ui_toast_expire = time.time() + 1.5
+                        return
+                    guide_y_local = int(frame.shape[0] * 0.95)
+                    best_idx = -1
+                    best_med = -1.0
+                    for idx, (box, cls_id) in enumerate(zip(boxes_all, all_class_ids)):
+                        if cls_id not in [0, 2, 5, 7]:
+                            continue
+                        x1, y1, x2, y2 = map(int, box)
+                        x1, y1 = max(0, x1), max(0, y1)
+                        x2, y2 = min(frame.shape[1]-1, x2), min(frame.shape[0]-1, y2)
+                        if y1 > guide_y_local:
+                            continue
+                        if x2 <= x1 or y2 <= y1:
+                            continue
+                        roi = normalized_uint8[y1:y2, x1:x2]
+                        if roi.size < 50:
+                            continue
+                        med = float(np.median(roi))
+                        if med > best_med:
+                            best_med = med
+                            best_idx = idx
+                    if best_idx == -1:
+                        print("[CAL] No suitable object ROI for calibration.")
+                        return
+                    x1, y1, x2, y2 = map(int, boxes_all[best_idx])
+                    x1, y1 = max(0, x1), max(0, y1)
+                    x2, y2 = min(frame.shape[1]-1, x2), min(frame.shape[0]-1, y2)
+                    roi = normalized_uint8[y1:y2, x1:x2].astype(np.float32)
+                    recommended = int(np.clip(np.percentile(roi, 25.0), 0, 255))
+                    if display_birdseye:
+                        try:
+                            cv2.setTrackbarPos('Sensitivity', 'BirdsEyeView', recommended)
+                        except Exception:
+                            # If the trackbar isn't available (shouldn't happen when clicking the button),
+                            # just fall back to showing a toast.
+                            pass
+                    print(f"[CAL] Set sensitivity to {recommended} (ROI median={best_med:.1f}).")
+                    MiDaS.ui_toast_text = f"Set: {recommended}"
+                    MiDaS.ui_toast_expire = time.time() + 1.8
+                except Exception as e:
+                    print(f"[CAL] Calibration error: {e}")
+                    MiDaS.ui_toast_text = "Calib error"
+                    MiDaS.ui_toast_expire = time.time() + 1.5
 
-        if latest_only:
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord('q') or key == 27:
+                break
+            elif key == ord('c'):
+                _run_calibration()
+
+            # UI button click handling (works for camera, IP stream, and files)
+            if MiDaS.ui_calib_request:
+                _run_calibration()
+                MiDaS.ui_calib_request = False
+
+        if use_reader:
             reader.release()
         else:
             cap.release()

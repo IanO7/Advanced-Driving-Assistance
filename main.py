@@ -11,9 +11,9 @@ from ldw import ldw_overlay
 # ================================
 USE_CAMERA_DEFAULT = False           # True: use webcam by default, False: use video file by default
 CAMERA_INDEX_DEFAULT = 0             # Which camera index to use when USE_CAMERA_DEFAULT is True
-VIDEO_PATH_DEFAULT = "test_videos/pedestrian_crash.mp4"  # Default video when USE_CAMERA_DEFAULT is False
+VIDEO_PATH_DEFAULT = "test_videos/california_drive.mp4"  # Default video when USE_CAMERA_DEFAULT & USE_IP_STREAM_DEFAULT are False
 USE_IP_STREAM_DEFAULT = True        # True: use an IP / network stream by default when no CLI source provided
-IP_STREAM_URL_DEFAULT = "http://10.211.119.11:8080/video"  # Default IP stream URL if enabled
+IP_STREAM_URL_DEFAULT = "http://192.168.0.108:8080/video"  # Default IP stream URL if enabled
 
 # Feature defaults when no --depth/--ldw flags are provided
 ENABLE_DEPTH_DEFAULT = True
