@@ -99,8 +99,9 @@ python main.py
 ```
 
 ### Calibration
-- Click "Calibrate" in BirdsEyeView or press `c` to auto-set the Sensitivity slider using the nearest detected object (25th percentile of its ROI).
+- Click "Calibrate" in BirdsEyeView or press `c` to auto-set the Sensitivity slider using the nearest detected object, meaning that all objects at this distance and closer (255-calibrated value will be alerted).
 - Use the slider to fine-tune aggressiveness; 58 is the recommended default.
+- Inferno scale: 0=dark (far), 255=bright (near). Pixels are “close” when index ≥ Sensitivity.
 
 ### Simple toggles (no-args Run button)
 If you just press Run (F5) in VS Code or run `python main.py` with no arguments, the defaults are controlled at the top of `main.py`:

@@ -298,7 +298,8 @@ class MiDaS:
         btn_w, btn_h = 110, 36
         btn_x = view_w - margin - btn_w
         btn_y = margin
-        MiDaS.ui_calib_button_rect = (btn_x, btn_y, btn_x + btn_w, btn_y + btn_h)
+        # Store base (unscaled) button rect first; may be scaled to window size below
+        base_btn_rect = (btn_x, btn_y, btn_x + btn_w, btn_y + btn_h)
         cv2.rectangle(view, (btn_x, btn_y), (btn_x + btn_w, btn_y + btn_h), (50, 50, 50), -1)
         cv2.rectangle(view, (btn_x, btn_y), (btn_x + btn_w, btn_y + btn_h), (0, 0, 0), 2)
         cv2.putText(view, "Calibrate", (btn_x + 10, btn_y + 24), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2, cv2.LINE_AA)
@@ -467,7 +468,24 @@ class MiDaS:
         if MiDaS.ui_toast_text and now < MiDaS.ui_toast_expire:
             cv2.rectangle(view, (10, 10), (10 + 200, 10 + 30), (0, 0, 0), -1)
             cv2.putText(view, MiDaS.ui_toast_text, (18, 32), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2, cv2.LINE_AA)
-        cv2.imshow(window_name, view)
+        # Scale the view to the current window size so the user can resize freely,
+        # and update the button hitbox to match the scaled coordinates.
+        scaled_view = view
+        try:
+            _x, _y, win_w, win_h = cv2.getWindowImageRect(window_name)
+            if win_w > 0 and win_h > 0 and (win_w != view_w or win_h != view_h):
+                scale_x = win_w / float(view_w)
+                scale_y = win_h / float(view_h)
+                scaled_view = cv2.resize(view, (win_w, win_h), interpolation=cv2.INTER_LINEAR)
+                bx0, by0, bx1, by1 = base_btn_rect
+                MiDaS.ui_calib_button_rect = (
+                    int(bx0 * scale_x), int(by0 * scale_y), int(bx1 * scale_x), int(by1 * scale_y)
+                )
+            else:
+                MiDaS.ui_calib_button_rect = base_btn_rect
+        except Exception:
+            MiDaS.ui_calib_button_rect = base_btn_rect
+        cv2.imshow(window_name, scaled_view)
     """Performs monocular depth estimation using Intel Labs MiDaS models.
 
     This class provides utilities to load a pre-trained MiDaS model,
@@ -651,6 +669,14 @@ class MiDaS:
                 cv2.setMouseCallback("BirdsEyeView", MiDaS._on_birdseye_click)
             except Exception:
                 pass
+        # Make the main window resizable like a normal window and start at our base size
+        main_win_name = "MiDaS Depth Estimation (Press 'q' to exit)"
+        if display_main:
+            try:
+                cv2.namedWindow(main_win_name, cv2.WINDOW_NORMAL)
+                cv2.resizeWindow(main_win_name, width, height)
+            except Exception:
+                pass
 
         while True:
             # Obtain the freshest frame (skip any backlog)
@@ -829,7 +855,15 @@ class MiDaS:
             combined = np.hstack((ldw_frame_resized, depth_resized))
 
             if display_main:
-                cv2.imshow("MiDaS Depth Estimation (Press 'q' to exit)", combined)
+                # Scale the combined image to the current window size so resizing works naturally
+                render_img = combined
+                try:
+                    _x, _y, win_w, win_h = cv2.getWindowImageRect(main_win_name)
+                    if win_w > 0 and win_h > 0 and (win_w != combined.shape[1] or win_h != combined.shape[0]):
+                        render_img = cv2.resize(combined, (win_w, win_h), interpolation=cv2.INTER_LINEAR)
+                except Exception:
+                    pass
+                cv2.imshow(main_win_name, render_img)
             if display_birdseye:
                 self.show_birds_eye_view(frame, car_boxes_birdseye, yolo_results=results, sensitivity_value=cutoff)
 
