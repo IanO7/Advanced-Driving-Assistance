@@ -1,70 +1,67 @@
-## Collision Avoidance (Depth-Based Object Detection) Methodology
-
-This project uses MiDaS depth estimation and YOLO object detection to trigger alerts for close objects (person, car, bus) based on the colorized depth map.
+## 🚗 Collision Avoidance (Depth-Based Object Detection) Methodology
 
 ---
 
-## Overview
-This project implements a real-time advanced driving assistance system (ADAS) that combines monocular depth estimation with object detection to provide robust collision and pedestrian alerts. The system leverages deep learning models for both depth mapping and object recognition, enabling reliable safety warnings.
+## 📝 Overview
+This project implements a real-time advanced driving assistance system (ADAS) by using MiDaS monocular depth estimation and YOLO object detection to trigger alerts for close objects (person, car, bus) based on the colorized depth map. 
 
 ---
 
-## Methodology
+## 🎬 Demo
+
+<!-- TODO: Add demo images/videos here -->
+
+---
+
+## 🧠 Methodology
 
 ### 1. Depth Map Generation
-- Uses a pre-trained MiDaS model (Intel Labs) to estimate a dense depth map from a single camera frame.
-- The depth map provides per-pixel distance information, allowing the system to understand the 3D structure of the scene.
+- Uses a pre-trained MiDaS model to generate a per-pixel depth map from a single camera frame, capturing the scene's 3D structure.
 
 ### 2. Object Detection
-- Based on `depth_estimation.py`. Utilizes a YOLO (You Only Look Once) model to detect objects such as cars, pedestrians, and buses in each frame.
-- Each detected object is assigned a bounding box and a class label.
+- Uses YOLO in `depth_estimation.py` to detect cars, pedestrians, and buses in each frame, assigning bounding boxes and class labels.
 
 ### 3. Object Awareness and Depth-Aware Alerting (Green vs Red Icons)
 
-- Based on `depth_estimation.py`. For each detected object, the system follows a two-stage logic (BUT CODE PROCESS IS ALWAYS RED THEN GREEN FOR ALL DRAWING IN MAP/LHS/VISUAL CASES CORRECT TO ACHIEVE BELOW WHEN PRESENTED/VISUALISED):
-  - **Stage 1: Awareness (Green Icon)**
-    - If an object (car, bus, truck, or pedestrian) is detected by YOLO/OpenCV, a green icon is shown in the bird’s eye view for that zone. This indicates presence only—no distance or depth check is performed, and no alert sound or warning is triggered.
-  - **Stage 2: Collision Risk (Red Icon)**
-    - The system examines the corresponding region in the depth map for each detected object. The Inferno colormap is used to visualize depth; yellow/white (indices 58–255 determined experimentally) represents the closest regions. If more than 75% of the pixels in the object's bounding box match this close-range color (empirically determined), a red icon is shown (alert), and a visual and audio warning is triggered.
-    - The red icon always takes priority over green in a given zone.
+- For each detected object, the system uses a two-stage logic (awareness and collision risk) as implemented in `depth_estimation.py`:
+  - **Stage 1: Awareness (Green Icon):** A green icon shows presence of a detected object, with no depth check or alert.
+  - **Stage 2: Collision Risk (Red Icon):** If over 75% of an object's box is close in the depth map, a red icon and alert are triggered, always overriding green.
 
-**Note:** The 75% threshold is calculated over the bounding box, but the depth map itself is quite accurate to the true outline and waviness of the object (like a person or car). This means the box may include some background or pixels of different color/depth, since the box is general but the depth map color closely follows the object's shape. The threshold is chosen to balance catching most close objects while avoiding false positives from background pixels inside the box. 
+> **Note:** The 75% threshold is applied to the bounding box (square/rectangle), but since the depth map closely matches object shapes, this balances catching close objects while minimizing false positives from background pixels (not object itself, but within bounding box).
 
 ### 4. Lane Departure Warning (LDW): 
-- Based on `ldw.py`. Detects lane lines in the video frame using edge detection, region masking, and Hough transform, then overlays the detected lanes and highlights the drivable area on the original image.
+- Based on `ldw.py`, this step detects lane lines and highlights the drivable area using edge detection and Hough transform overlays.
 
 ### 5. Visualization
-- The original frame and the colorized depth map (with bounding boxes and a colorbar) are displayed side by side for intuitive understanding.
-- Alerts are overlaid on the video feed for immediate feedback.
-- A horizontal yellow guide line is drawn 10% from the bottom of the live display to help you align the vehicle's bonnet (hood) just below it. This improves real-world depth estimation. The line is only visible in the live display, not in saved videos, and is not part of the actual video (just output).
-- In the BirdsEyeView window, a "Sensitivity" slider lets you adjust how close an object must be to trigger a red alert icon. Lower values are more sensitive (alert for further objects), higher values require objects to be closer. The default is 58 (recommended), and the UI shows "(recommended)" if set to this value. Adjust live as needed.
-- Alerts use Left / Center / Right: three equal-width forward sectors (not lane-based) indicating where an object lies.
+- The original frame and colorized depth map (with bounding boxes and colorbar) are shown side by side for clarity.
+- Alerts appear directly on the video feed for instant feedback.
+- A yellow guide line, 10% from the bottom, helps align the bonnet and is only visible in the live display.
+- The BirdsEyeView window has a Sensitivity slider to set how close an object must be for a red alert, with 58 as the recommended default.
+- Alerts indicate Left, Center, or Right zones (not lane-based) for detected objects.
 
-**Note:** Any detected object whose bounding box is completely below this yellow line (i.e., in the bonnet area) is excluded from all alert and awareness logic. Only objects at least partially above or touching the line are considered for alerts or icons.
+> **Note:** Objects fully below the yellow line (bonnet area) are ignored for alerts; only those above or touching the line are considered.
 
-**Best practice:** For maximum clarity, fill the rectangle under the yellow line with a bonnet overlay (e.g., a gray or car-shaped region). This visually indicates that the area is not scanned for objects, even though depth is still estimated there, and prevents confusion about undetected objects in that region.
+> **Best practice:** Add a bonnet overlay below the yellow line to show this area is not checked for alerts, avoiding confusion.
 
-**Bird’s Eye View Icon Logic:**
-- **Red icon:** Object detected and depth/collision risk confirmed (alert, with sound and visual warning).
-- **Green icon:** Object detected by YOLO/OpenCV, but distance not checked—just shows presence (no sound, no alert, only visual awareness).
+## 🕳️ Why Depth Map Instead of Pixel-Based (2D) Approaches?
 
-## Why Depth Map Instead of Pixel-Based (2D) Approaches?
+**Contextual Awareness:** 2D pixel methods only estimate image distance, not real-world distance, and are affected by zoom and perspective, missing true depth.
+**Relative 3D Structure:** Depth maps better capture which objects are closer or farther in the scene, even if zoom or angle changes, making alerts more meaningful.
+**Robustness:** Combining object detection with depth estimation reduces false alerts and improves safety by focusing on true collision risks.
 
-- **Contextual Awareness:** Pixel-based (2D) methods only measure the distance between objects in image pixels, not their true real-world distance from the vehicle. This 2D pixel estimation is affected by camera zoom and perspective—if you zoom in, the pixel distance changes even if the real distance does not. It does not account for depth, so objects may appear close in the image but be far away in reality, or vice versa.
-- **Relative 3D Structure:** Depth maps do not provide exact real-world distances either, and zoom can still affect their accuracy, but they capture the relative 3D structure of the scene much better than 2D pixel estimation. This means the system can tell which objects are closer or farther away within the same image, even if zoom or camera angle changes. For example, if object X is closer than object Y in the image, the depth map will reflect that relationship, making alerts more meaningful and robust.
-- **Robustness:** By combining object detection with depth estimation, the system can more reliably identify true collision risks, reducing unnecessary alerts and improving safety.
+## ✨ Features
+![Python](https://img.shields.io/badge/Python-3.8%2B-blue?logo=python&logoColor=white)
+![OpenCV](https://img.shields.io/badge/OpenCV-Real--Time-green?logo=opencv&logoColor=white)
+![MiDaS](https://img.shields.io/badge/Depth--Estimation-MiDaS-informational)
+![YOLO](https://img.shields.io/badge/Object%20Detection-YOLOv11-orange)
+![Bird's Eye View](https://img.shields.io/badge/Bird's%20Eye%20View-Visualization-blueviolet)
+![Audio Alerts](https://img.shields.io/badge/Audio%20Alerts-Enabled-yellow)
+![Lane Detection](https://img.shields.io/badge/Lane%20Detection-Edge%20%2B%20Hough-lightgrey)
+![Modular Code](https://img.shields.io/badge/Modular-Extensible%20Python-9cf)
+![Offline Support](https://img.shields.io/badge/Offline--Support-Yes-brightgreen)
+![Accessible UI](https://img.shields.io/badge/Accessible%20UI-inclusive-yellowgreen)
 
-## Features
-- Real-time video processing with OpenCV
-- Monocular depth estimation using MiDaS
-- Object detection with YOLO
-- Depth-aware alerting for cars, pedestrians, buses, and trucks
-- Visual and audio warnings
-- Lane detection (lane departure warning alert to be integrated later)
-- **Bird’s Eye View visualization** with icon-based alerts for cars, pedestrians, buses, and trucks
-- Modular, extensible Python code
-
-## Getting Started
+## 🚦 Getting Started
 
 ### Anaconda Navigator GUI Method
 
@@ -77,6 +74,8 @@ This project implements a real-time advanced driving assistance system (ADAS) th
   pip install -r requirements.txt
   ```
 4. Done. Always use the Anaconda Prompt for running and installing, VS Code terminal won't work.
+
+### VS Code Terminal CLI Method
 
 ### 1. Create a Python virtual environment
 ```bash
@@ -99,24 +98,22 @@ python main.py
 ```
 
 ### Calibration
-- Click "Calibrate" in BirdsEyeView or press `c` to auto-set the Sensitivity slider using the nearest detected object, meaning that all objects at this distance and closer (255-calibrated value will be alerted).
-- Use the slider to fine-tune aggressiveness; 58 is the recommended default.
-- Inferno scale: 0=dark (far), 255=bright (near). Pixels are “close” when index ≥ Sensitivity.
+- Click "Calibrate" or press `c` in BirdsEyeView to auto-set Sensitivity using the nearest detected object; 58 is the recommended default.
+- Adjust the slider to set how close an object must be for an alert (0=far, 255=near; pixels are "close" if index ≥ Sensitivity).
 
 ### Simple toggles (no-args Run button)
-If you just press Run (F5) in VS Code or run `python main.py` with no arguments, the defaults are controlled at the top of `main.py`:
-- `USE_CAMERA_DEFAULT`: set `True` to default to webcam, `False` to default to a video file
-- `CAMERA_INDEX_DEFAULT`: which webcam index to use (usually `0`)
-- `VIDEO_PATH_DEFAULT`: default MP4 path (e.g., `test_videos/california_drive.mp4`)
-- `ENABLE_DEPTH_DEFAULT` / `ENABLE_LDW_DEFAULT`: which features are enabled when no flags are passed
- - `USE_IP_STREAM_DEFAULT` / `IP_STREAM_URL_DEFAULT`: enable and set these to auto-use a live phone/IP stream without CLI flags
+Running with no arguments uses defaults in `main.py`:
+- `USE_CAMERA_DEFAULT`: webcam or video file
+- `CAMERA_INDEX_DEFAULT`: webcam index
+- `VIDEO_PATH_DEFAULT`: default video path
+- `ENABLE_DEPTH_DEFAULT` / `ENABLE_LDW_DEFAULT`: enabled features
+- `USE_IP_STREAM_DEFAULT` / `IP_STREAM_URL_DEFAULT`: auto-use live phone/IP stream
 
 ### Display & Alert Toggles
-Also in `main.py` you can quickly enable/disable UI surfaces without CLI flags:
-- `SHOW_MAIN_WINDOW_DEFAULT`: show/hide combined Lane + Depth window.
-- `SHOW_BIRDSEYE_DEFAULT`: show/hide Bird's Eye proximity/sensitivity window.
-- `ALERT_SOUND_ENABLED_DEFAULT`: keep audio alerts even if all windows are hidden.
-
+You can quickly enable/disable UI surfaces in `main.py`:
+- `SHOW_MAIN_WINDOW_DEFAULT`: show/hide main window
+- `SHOW_BIRDSEYE_DEFAULT`: show/hide Bird's Eye window
+- `ALERT_SOUND_ENABLED_DEFAULT`: keep audio alerts even if windows are hidden
 CLI flags always override these toggles.
 
 ### Command-line options (override toggles)
@@ -138,43 +135,30 @@ IP / phone stream (toggle only): set `USE_IP_STREAM_DEFAULT = True`, then:
 python main.py
 ```
 
-Tip: `--video 0` is also treated as webcam index `0`.
 
-Do not run `depth_estimation.py` or `ldw.py` directly. Use `main.py` to control all features.
+> **Note:** Do not run `depth_estimation.py` or `ldw.py` directly. Use `main.py` to control all features.
 
-## Notes
-- This system is designed for research and prototyping. For deployment, further optimization and testing are recommended.
-- The methodology can be extended to other object classes or integrated with additional sensors for enhanced reliability.
-- The system detects cars, pedestrians, buses, and trucks.
-- Bicycles and motorcycles are not included, as stationary bikes/motorcycles are not a collision risk and any person present (cyclist/motorcyclist) would already be detected as a pedestrian.
-- This system assumes a typical multi-lane road and does not restrict collision alerts to detected lanes. In single-lane or crowded town scenarios, more alerts may occur, which is expected due to closer objects. Lane-based alert restriction is not applied, as the multi-zone logic is designed for all types of roads.
-- Latest-frame capture clears buffer lag by processing on the current frame rather than the next frame which has since passed (due to lag), but not processing latency: objects that appear and disappear within a ~1s inference pass can be missed.
+## 📝 Notes
+- For research/prototyping; optimize and test before deployment.
+- Methodology can extend to more object classes or sensors.
+- Detects cars, pedestrians, buses, and trucks only.
+- Bikes/motorcycles excluded; riders detected as pedestrians.
+- Multi-zone logic works for all roads; more alerts in crowded/single-lane scenarios are expected.
+- Latest-frame capture reduces buffer lag but not processing latency; very brief objects may be missed.
 
-### Parallel Processing Mode (Fast Path)
-This mode reduces perceived alert latency without changing the collision algorithm.
-**What Changed:**
-- Separate threads for detection (`DetectionWorker`) and depth (`DepthWorker`).
-- Always use freshest frame (no backlog) via `LatestFrameReader`.
-- Optional smaller YOLO input size (default 256) for higher FPS.
-- Tunable intervals (`--detection-interval`, `--depth-interval`) to cap thread frequency.
-**What Did NOT Change:**
-- 2-stage logic (presence → depth risk) and red-over-green priority.
-- 75% close-pixel ratio check for alert promotion.
-- Inferno colormap cutoff semantics and sensitivity trackbar default (58).
-- Depth normalization and bounding box proximity evaluation method.
-**Trade-offs:**
-- Slight variation in box tightness with reduced `--detection-imgsz`.
-- Very fast moving objects may have minor temporal mismatch between detection and depth frames (usually reduces false positives).
-**Disable / Reproduce Legacy:** run with `--no-parallel --detection-imgsz 288`.
+### ⚡ Parallel Processing Mode (Fast Path)
+Reduces alert latency without changing collision logic:
+- Detection and depth run in parallel threads (DetectionWorker, DepthWorker)
+- Always uses the latest frame (no backlog)
+- Optional smaller YOLO input (default 256) for higher FPS
+- Adjustable detection/depth intervals (`--detection-interval`, `--depth-interval`)
+- 2-stage logic, red-over-green priority, and 75% close-pixel check unchanged
+- Inferno colormap, sensitivity default (58), and box proximity logic unchanged
+- Trade-offs: box tightness may vary with smaller input; very fast objects may have minor detection/depth mismatch
+- To disable: run with `--no-parallel --detection-imgsz 288`
 
 
-
-**NEXT STEPS
-- cotrol interface for threshold (pixel no need), and features to turn on
--calibration of sensitivity, 75%ok general, but which depth to alert close is sensitivity value to calibrate beforehand! size !=  matter since depth map clearly outlines accurately
-
-
-## License
+## 📄 License
 See [LICENSE](LICENSE).
 
 ## 📁 Repository Contents
@@ -182,35 +166,21 @@ See [LICENSE](LICENSE).
 - `main.py` — Main controller: enables/disables features (depth, LDW, bird’s eye view)
 - `depth_estimation.py` — Core logic: depth estimation, object detection, alerting, bird’s eye view visualization
 - `ldw.py` — Lane detection and overlay logic (modular LDW)
+- `requirements.txt` — Python dependencies
+- `LICENSE` — License file
 - `yolo11n.pt` — YOLOv11 weights
+- `assets/` — Icons and overlay images (e.g., `green_car.png`, `red_person.png`, `birds_eye_view_car.png`, `alert_sound.mp3`)
+- `test_videos/` — Example/test videos (e.g., `california_drive.mp4`, `car_crash.mp4`, `pedestrian_crash.mp4`, `depth_video.mp4`, `japan_drive.mp4`, `output.mp4`)
+- `output.mp4` — Example output video
+- `example_good.mp4` — Example good run video
+- `__pycache__/` — Python cache files
+- `.vscode/` — VS Code settings
+- `.gitignore` — Git ignore file
+- `.git/` — Git repository metadata
 
 ---
 
-## 🛠 Requirements
-
-- Python 3.8+
-- Install dependencies:
-  ```bash
-  pip install opencv-python numpy ultralytics
-  ```
-
----
-
-## 🎨 Color Coding
-
-**Bird’s Eye View Icons:**
-- <span style="color:red">Red car/bus/person icon</span>: Alert (collision risk, depth checked, sound and visual warning)
-- <span style="color:green">Green car/bus/person icon</span>: Object detected (YOLO/OpenCV), but depth not checked—shows presence only (no sound, no alert)
-- No icon: Safe (no alert or detection in zone)
-
-**Bounding box overlays:**
-- <span style="color:red">Red</span>: Alert (car, bus, truck, or pedestrian)
-- <span style="color:green">Green</span>: Safe car
-- <span style="color:yellow">Yellow</span>: Guide line for bonnet alignment
-
----
-
-## References
+## 🔗 References
 
 This project includes small portions and ideas inspired by:
 - MiDaS (Intel ISL): https://github.com/isl-org/MiDaS

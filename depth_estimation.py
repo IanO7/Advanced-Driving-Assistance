@@ -111,7 +111,6 @@ class DetectionWorker:
         self.interval = max(0.0, interval)
         self.lock = threading.Lock()
         self.latest_results = None
-        self.latest_time = 0.0
         self.running = True
         self.thread = threading.Thread(target=self._loop, daemon=True)
         self.thread.start()
@@ -134,7 +133,6 @@ class DetectionWorker:
                 results = None
             with self.lock:
                 self.latest_results = results
-                self.latest_time = time.time()
             if self.interval > 0:
                 time.sleep(self.interval)
 
@@ -307,7 +305,7 @@ class MiDaS:
         if in_button and (event == cv2.EVENT_LBUTTONDOWN or event == cv2.EVENT_LBUTTONUP):
             MiDaS.ui_calib_request = True
     @staticmethod
-    def show_birds_eye_view(frame, car_boxes, window_name="BirdsEyeView", yolo_results=None, sensitivity_value=None):
+    def show_birds_eye_view(frame, car_boxes, window_name="BirdsEyeView", yolo_results=None, sensitivity_value=None, show_sensitivity_text: bool = False):
         # --- Bird's Eye View Icon Logic (matches README) ---
         # For each detected object, the system follows a two-stage logic:
         #   1. Stage 1: Awareness (Green Icon)
@@ -458,8 +456,8 @@ class MiDaS:
             MiDaS._alpha_blit(view, car_img, car_x, car_y)
         else:
             cv2.rectangle(view, (car_x, car_y), (car_x + car_w, car_y + car_h), (50, 50, 50), -1)
-        # Draw sensitivity value at the top-left (kept clear of the button)
-        if sensitivity_value is not None:
+        # Optional: draw sensitivity value text in the panel (off by default)
+        if show_sensitivity_text and sensitivity_value is not None:
             text = f"Sensitivity: {sensitivity_value}"
             cv2.putText(view, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,0), 2, cv2.LINE_AA)
         # Optional toast: transient on-screen message (e.g., calibration results)
@@ -554,7 +552,7 @@ class MiDaS:
         return colorized, depth_min, depth_max
 
     @staticmethod
-    def draw_depth_colorbar(image, vmin, vmax, colormap=cv2.COLORMAP_INFERNO, width=30, height=200, margin=10, decimals=2):
+    def draw_depth_colorbar(image, vmin, vmax, colormap=cv2.COLORMAP_INFERNO, width=30, height=200, margin=10):
         """Draws a vertical colorbar on the right side of the image showing the depth range."""
         bar_color = MiDaS._get_colorbar(width, height, colormap)
         # Place bar on right side of image
