@@ -263,6 +263,39 @@ class MiDaS:
             MiDaS.colorbar_cache[key] = bar_color
             cb = bar_color
         return cb.copy()
+
+    @staticmethod
+    def _alpha_blit(dst, src, x, y):
+        """Blit `src` (BGR or BGRA) onto `dst` at (x,y) with alpha support and clipping.
+
+        - If `src` has 4 channels, uses the 4th as alpha in [0,255].
+        - Clamps drawing region to `dst` bounds to avoid index errors.
+        - Mutates `dst` in place.
+        """
+        if dst is None or src is None:
+            return
+        dh, dw = dst.shape[:2]
+        sh, sw = src.shape[:2]
+        if sh <= 0 or sw <= 0:
+            return
+        x0 = max(0, int(x))
+        y0 = max(0, int(y))
+        x1 = min(dw, x0 + sw)
+        y1 = min(dh, y0 + sh)
+        if x1 <= x0 or y1 <= y0:
+            return
+        sx0 = x0 - int(x)
+        sy0 = y0 - int(y)
+        sx1 = sx0 + (x1 - x0)
+        sy1 = sy0 + (y1 - y0)
+        src_crop = src[sy0:sy1, sx0:sx1]
+        dst_roi = dst[y0:y1, x0:x1]
+        if src_crop.shape[2] == 4:
+            alpha = (src_crop[:, :, 3] / 255.0)[:, :, None]
+            blended = (alpha * src_crop[:, :, :3] + (1.0 - alpha) * dst_roi).astype(np.uint8)
+            dst_roi[:] = blended
+        else:
+            dst_roi[:] = src_crop[:, :, :3]
     @staticmethod
     def _on_birdseye_click(event, x, y, flags, param):
         """OpenCV mouse callback: set a flag when the Calibrate button is clicked."""
@@ -297,7 +330,9 @@ class MiDaS:
         # Draw a simple UI button for calibration in the top-right
         btn_w, btn_h = 110, 36
         btn_x = view_w - margin - btn_w
-        btn_y = margin
+        # Push the button slightly lower so it won't overlap the
+        # sensitivity label on compact window sizes
+        btn_y = margin + 20
         # Store base (unscaled) button rect first; may be scaled to window size below
         base_btn_rect = (btn_x, btn_y, btn_x + btn_w, btn_y + btn_h)
         cv2.rectangle(view, (btn_x, btn_y), (btn_x + btn_w, btn_y + btn_h), (50, 50, 50), -1)
@@ -309,14 +344,7 @@ class MiDaS:
         car_img_path = os.path.join(os.path.dirname(__file__), 'assets', 'birds_eye_view_car.png')
         car_img = MiDaS._get_resized_asset(car_img_path, (car_w, car_h))
         if car_img is not None:
-                # If PNG with alpha, blend
-                if car_img.shape[2] == 4:
-                    alpha = (car_img[:,:,3] / 255.0)[:, :, None]
-                    region = view[car_y:car_y+car_h, car_x:car_x+car_w]
-                    blended = (alpha * car_img[:,:,:3] + (1 - alpha) * region).astype(np.uint8)
-                    region[:] = blended
-                else:
-                    view[car_y:car_y+car_h, car_x:car_x+car_w] = car_img[:,:,:3]
+            MiDaS._alpha_blit(view, car_img, car_x, car_y)
         else:
             cv2.rectangle(view, (car_x, car_y), (car_x + car_w, car_y + car_h), (50, 50, 50), -1)
             cv2.putText(view, "YOU", (car_x + 5, car_y + car_h//2), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
@@ -402,25 +430,11 @@ class MiDaS:
                 elif alert_type == 'truck' and red_bus_img is not None:
                     img_to_use = red_bus_img
                 if img_to_use is not None:
-                    car_img_zone = img_to_use
-                    if car_img_zone.shape[2] == 4:
-                        alpha = (car_img_zone[:,:,3] / 255.0)[:, :, None]
-                        region = view[y_start:y_start+car_h, x_start:x_start+car_w]
-                        blended = (alpha * car_img_zone[:,:,:3] + (1 - alpha) * region).astype(np.uint8)
-                        region[:] = blended
-                    else:
-                        view[y_start:y_start+car_h, x_start:x_start+car_w] = car_img_zone[:,:,:3]
+                    MiDaS._alpha_blit(view, img_to_use, x_start, y_start)
                     # Draw red border
                     cv2.rectangle(view, (x_start, y_start), (x_start+car_w, y_start+car_h), (0,0,255), 4)
                 elif car_img is not None:
-                    car_img_zone = car_img
-                    if car_img_zone.shape[2] == 4:
-                        alpha = (car_img_zone[:,:,3] / 255.0)[:, :, None]
-                        region = view[y_start:y_start+car_h, x_start:x_start+car_w]
-                        blended = (alpha * car_img_zone[:,:,:3] + (1 - alpha) * region).astype(np.uint8)
-                        region[:] = blended
-                    else:
-                        view[y_start:y_start+car_h, x_start:x_start+car_w] = car_img_zone[:,:,:3]
+                    MiDaS._alpha_blit(view, car_img, x_start, y_start)
                     cv2.rectangle(view, (x_start, y_start), (x_start+car_w, y_start+car_h), (0,0,255), 4)
                 else:
                     # Fallback: just draw red rectangle
@@ -438,30 +452,15 @@ class MiDaS:
                 elif green_type == 'truck' and green_bus_img is not None:
                     img_to_use = green_bus_img
                 if img_to_use is not None:
-                    car_img_zone = img_to_use
-                    if car_img_zone.shape[2] == 4:
-                        alpha = (car_img_zone[:,:,3] / 255.0)[:, :, None]
-                        region = view[y_start:y_start+car_h, x_start:x_start+car_w]
-                        blended = (alpha * car_img_zone[:,:,:3] + (1 - alpha) * region).astype(np.uint8)
-                        region[:] = blended
-                    else:
-                        view[y_start:y_start+car_h, x_start:x_start+car_w] = car_img_zone[:,:,:3]
+                    MiDaS._alpha_blit(view, img_to_use, x_start, y_start)
         # Draw car image again at the bottom (your car)
         if car_img is not None:
-            if car_img.shape[2] == 4:
-                alpha = (car_img[:,:,3] / 255.0)[:, :, None]
-                region = view[car_y:car_y+car_h, car_x:car_x+car_w]
-                blended = (alpha * car_img[:,:,:3] + (1 - alpha) * region).astype(np.uint8)
-                region[:] = blended
-            else:
-                view[car_y:car_y+car_h, car_x:car_x+car_w] = car_img[:,:,:3]
+            MiDaS._alpha_blit(view, car_img, car_x, car_y)
         else:
             cv2.rectangle(view, (car_x, car_y), (car_x + car_w, car_y + car_h), (50, 50, 50), -1)
-        # Draw sensitivity value at the top of the window if provided
+        # Draw sensitivity value at the top-left (kept clear of the button)
         if sensitivity_value is not None:
             text = f"Sensitivity: {sensitivity_value}"
-            if sensitivity_value == BIRDSEYE_SENSITIVITY_DEFAULT:
-                text += " (recommended)"
             cv2.putText(view, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,0), 2, cv2.LINE_AA)
         # Optional toast: transient on-screen message (e.g., calibration results)
         now = time.time()
@@ -571,14 +570,8 @@ class MiDaS:
         overlay[y0:y1, x0:x1] = bar_color
         return overlay
 
-    @staticmethod
-    def stack_frames(frame1: np.ndarray, frame2: np.ndarray, width: int = 1280, height: int = 640) -> np.ndarray:
-        """Safely stacks two frames horizontally with resizing to a fixed display resolution."""
-        h, w = frame1.shape[:2]
-        frame2 = cv2.resize(frame2, (w, h))
-        combined = np.hstack((frame1, frame2))
-        combined = cv2.resize(combined, (width, height))
-        return combined
+    # Removed unused helper `stack_frames` (no references). Keeping logic inline
+    # in the main loop avoids unnecessary extra copies and keeps behavior identical.
 
     def infer_video(self, source: str = 0, output_path: str = None, display_main: bool = True, display_birdseye: bool = True, sound_enabled: bool = True, latest_only: bool = True, parallel_detection: bool = True, detection_interval: float = 0.0, detection_imgsz: int = 256, parallel_depth: bool = True, depth_interval: float = 0.0) -> None:
         """Performs real-time depth estimation on a video stream.
@@ -665,6 +658,9 @@ class MiDaS:
         if display_birdseye:
             try:
                 cv2.namedWindow("BirdsEyeView", cv2.WINDOW_NORMAL)
+                # Allow free aspect ratio and start with a comfortable size
+                cv2.setWindowProperty("BirdsEyeView", cv2.WND_PROP_ASPECT_RATIO, cv2.WINDOW_FREERATIO)
+                cv2.resizeWindow("BirdsEyeView", 360, 520)
                 cv2.createTrackbar('Sensitivity', 'BirdsEyeView', BIRDSEYE_SENSITIVITY_DEFAULT, 255, lambda x: None)
                 cv2.setMouseCallback("BirdsEyeView", MiDaS._on_birdseye_click)
             except Exception:
@@ -674,6 +670,7 @@ class MiDaS:
         if display_main:
             try:
                 cv2.namedWindow(main_win_name, cv2.WINDOW_NORMAL)
+                cv2.setWindowProperty(main_win_name, cv2.WND_PROP_ASPECT_RATIO, cv2.WINDOW_FREERATIO)
                 cv2.resizeWindow(main_win_name, width, height)
             except Exception:
                 pass
@@ -847,7 +844,7 @@ class MiDaS:
             # Draw the guide line and text on the LDW overlay only (not on the frame used for detection)
             guide_y = int(ldw_frame.shape[0] * 0.95)
             cv2.line(ldw_frame, (0, guide_y), (ldw_frame.shape[1], guide_y), (0, 255, 255), 2)
-            cv2.putText(ldw_frame, 'Align bonnet with this line for best results (BELOW NOT CONSIDERED IN ALGORITHM)', (10, guide_y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+            cv2.putText(ldw_frame, 'Align bonnet here (BELOW NOT DETECTED)', (10, guide_y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
             # Resize LDW overlay and depth map to same size
             ldw_frame_resized = cv2.resize(ldw_frame, (width // 2, height))
             depth_resized = cv2.resize(colored_depth_with_boxes, (width // 2, height))
