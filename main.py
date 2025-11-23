@@ -19,7 +19,7 @@ ENABLE_DEPTH_DEFAULT = True
 ENABLE_LDW_DEFAULT = True
 
 # Output saving controls (for Run button / no-arg runs)
-SAVE_OUTPUT_DEFAULT = False                 # True to save by default, False to not save by default
+SAVE_OUTPUT_DEFAULT = True                 # True to save by default, False to not save by default
 OUTPUT_PATH_DEFAULT = "output.mp4"         # Default filename when saving is enabled without --output
 
 # Display toggles (set here for quick on/off without CLI flags)
