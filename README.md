@@ -7,13 +7,36 @@ This project implements a real-time advanced driving assistance system (ADAS) by
 
 ---
 
+## ✨ Features
+![Python](https://img.shields.io/badge/Python-3.8%2B-blue?logo=python&logoColor=white)
+![OpenCV](https://img.shields.io/badge/OpenCV-Real--Time-green?logo=opencv&logoColor=white)
+![MiDaS](https://img.shields.io/badge/Depth--Estimation-MiDaS-informational)
+![YOLO](https://img.shields.io/badge/Object%20Detection-YOLOv11-orange)
+![Bird's Eye View](https://img.shields.io/badge/Bird's%20Eye%20View-Visualization-blueviolet)
+![Audio Alerts](https://img.shields.io/badge/Audio%20Alerts-Enabled-yellow)
+![Lane Detection](https://img.shields.io/badge/Lane%20Detection-Edge%20%2B%20Hough-lightgrey)
+![Modular Code](https://img.shields.io/badge/Modular-Extensible%20Python-9cf)
+![Offline Support](https://img.shields.io/badge/Offline--Support-Yes-brightgreen)
+![Accessible UI](https://img.shields.io/badge/Accessible%20UI-inclusive-yellowgreen)
+
+---
+
 ## 🎬 Demo
 
-<!-- TODO: Add demo images/videos here -->
+
+<div align="center">
+  <img src="README_app_screenshots/1.png" alt="Screenshot 1" width="350" style="margin:10px;"/>
+  <img src="README_app_screenshots/2.png" alt="Screenshot 2" width="350" style="margin:10px;"/>
+  <img src="README_app_screenshots/3.png" alt="Screenshot 3" width="350" style="margin:10px;"/>
+  <img src="README_app_screenshots/4.png" alt="Screenshot 3" width="350" style="margin:10px;"/>
+</div>
+<!-- TODO: ADD OUTPUT VIDEO ALSO LOOPING GIF -->
 
 ---
 
 ## 🧠 Methodology
+
+> **Note:** Parallel Processing Mode reduces alert latency by running detection and depth in separate threads, always using the latest frame, with all alert logic unchanged; disable with `--no-parallel --detection-imgsz 288`.
 
 ### 1. Depth Map Generation
 - Uses a pre-trained MiDaS model to generate a per-pixel depth map from a single camera frame, capturing the scene's 3D structure.
@@ -43,23 +66,15 @@ This project implements a real-time advanced driving assistance system (ADAS) by
 
 > **Best practice:** Add a bonnet overlay below the yellow line to show this area is not checked for alerts, avoiding confusion.
 
+---
+
 ## 🕳️ Why Depth Map Instead of Pixel-Based (2D) Approaches?
 
 **Contextual Awareness:** 2D pixel methods only estimate image distance, not real-world distance, and are affected by zoom and perspective, missing true depth.
 **Relative 3D Structure:** Depth maps better capture which objects are closer or farther in the scene, even if zoom or angle changes, making alerts more meaningful.
 **Robustness:** Combining object detection with depth estimation reduces false alerts and improves safety by focusing on true collision risks.
 
-## ✨ Features
-![Python](https://img.shields.io/badge/Python-3.8%2B-blue?logo=python&logoColor=white)
-![OpenCV](https://img.shields.io/badge/OpenCV-Real--Time-green?logo=opencv&logoColor=white)
-![MiDaS](https://img.shields.io/badge/Depth--Estimation-MiDaS-informational)
-![YOLO](https://img.shields.io/badge/Object%20Detection-YOLOv11-orange)
-![Bird's Eye View](https://img.shields.io/badge/Bird's%20Eye%20View-Visualization-blueviolet)
-![Audio Alerts](https://img.shields.io/badge/Audio%20Alerts-Enabled-yellow)
-![Lane Detection](https://img.shields.io/badge/Lane%20Detection-Edge%20%2B%20Hough-lightgrey)
-![Modular Code](https://img.shields.io/badge/Modular-Extensible%20Python-9cf)
-![Offline Support](https://img.shields.io/badge/Offline--Support-Yes-brightgreen)
-![Accessible UI](https://img.shields.io/badge/Accessible%20UI-inclusive-yellowgreen)
+---
 
 ## 🚦 Getting Started
 
@@ -135,8 +150,9 @@ IP / phone stream (toggle only): set `USE_IP_STREAM_DEFAULT = True`, then:
 python main.py
 ```
 
-
 > **Note:** Do not run `depth_estimation.py` or `ldw.py` directly. Use `main.py` to control all features.
+
+---
 
 ## 📝 Notes
 - For research/prototyping; optimize and test before deployment.
@@ -146,20 +162,12 @@ python main.py
 - Multi-zone logic works for all roads; more alerts in crowded/single-lane scenarios are expected.
 - Latest-frame capture reduces buffer lag but not processing latency; very brief objects may be missed.
 
-### ⚡ Parallel Processing Mode (Fast Path)
-Reduces alert latency without changing collision logic:
-- Detection and depth run in parallel threads (DetectionWorker, DepthWorker)
-- Always uses the latest frame (no backlog)
-- Optional smaller YOLO input (default 256) for higher FPS
-- Adjustable detection/depth intervals (`--detection-interval`, `--depth-interval`)
-- 2-stage logic, red-over-green priority, and 75% close-pixel check unchanged
-- Inferno colormap, sensitivity default (58), and box proximity logic unchanged
-- Trade-offs: box tightness may vary with smaller input; very fast objects may have minor detection/depth mismatch
-- To disable: run with `--no-parallel --detection-imgsz 288`
-
+---
 
 ## 📄 License
 See [LICENSE](LICENSE).
+
+---
 
 ## 📁 Repository Contents
 
