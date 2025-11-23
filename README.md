@@ -35,12 +35,6 @@ This project implements a real-time advanced driving assistance system (ADAS) by
   <img src="README_app_screenshots/4.png" alt="Screenshot 3" width="350" style="margin:10px;"/>
 </div>
 
-<div align="center" style="margin-top:20px;">
-  <video width="480" controls>
-    <source src="README_app_screenshots/output.mp4" type="video/mp4">
-  </video>
-</div>
-
 ---
 
 ## 🧠 Methodology
