@@ -23,6 +23,10 @@ This project implements a real-time advanced driving assistance system (ADAS) by
 
 ## 🎬 Demo
 
+<div align="center">
+  <img src="README_app_screenshots/output.gif" alt="Demo Animation" width="480" style="margin-bottom:20px;"/>
+</div>
+
 
 <div align="center">
   <img src="README_app_screenshots/1.png" alt="Screenshot 1" width="350" style="margin:10px;"/>
